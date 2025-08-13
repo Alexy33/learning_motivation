@@ -265,7 +265,7 @@ timer_display_status() {
     --border double \
     --margin "1 2" \
     --padding "1 2" \
-    --border.foreground "$status_color" \
+    --border-foreground "$status_color" \
     "📋 MISSION ACTIVE: $status_text" \
     "" \
     "🎯 Activité: $activity" \

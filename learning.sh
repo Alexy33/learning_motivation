@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================================
-# Cyber Challenge Manager
+# Learning Challenge Manager
 # A gamified task management system for cybersecurity training
 # ============================================================================
 
@@ -9,7 +9,7 @@ set -euo pipefail
 
 # Configuration globale
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly CONFIG_DIR="$HOME/.cyber_challenge"
+readonly CONFIG_DIR="$HOME/.learning_challenge"
 readonly LIB_DIR="$SCRIPT_DIR/lib"
 readonly BIN_DIR="$SCRIPT_DIR/bin"
 
@@ -19,6 +19,7 @@ source "$LIB_DIR/ui.sh"
 source "$LIB_DIR/mission.sh"
 source "$LIB_DIR/stats.sh"
 source "$LIB_DIR/timer.sh"
+source "$LIB_DIR/punishment.sh"
 
 # ============================================================================
 # Fonctions principales
@@ -41,10 +42,11 @@ check_dependencies() {
 }
 
 show_main_menu() {
-  ui_info "Sélectionnez votre activité :"
+  echo
+  echo -e "${CYAN}Sélectionnez votre activité :${NC}"
+  echo
 
-  local choice
-  choice=$(gum choose \
+  gum choose \
     --cursor="➤ " \
     --selected.foreground="#00ff00" \
     --cursor.foreground="#0099ff" \
@@ -55,39 +57,50 @@ show_main_menu() {
     "🔍 Veille sécurité" \
     "📊 Statistiques" \
     "⚙️  Configuration" \
-    "🚪 Quitter")
-
-  echo "$choice"
+    "🚪 Quitter"
 }
 
 handle_menu_choice() {
-  local choice=$1
+  local choice="$1"
 
+  # Version plus tolérante - utilise des patterns
   case "$choice" in
-  "🔥 Challenge TryHackMe")
+  *"Challenge TryHackMe"*)
+    echo "TryHackMe sélectionné !"
     mission_create "Challenge TryHackMe"
     ;;
-  "📚 Documentation CVE")
+  *"Documentation CVE"*)
+    echo "CVE sélectionné !"
     mission_create "Documentation CVE"
     ;;
-  "🦠 Analyse de malware")
+  *"Analyse de malware"*)
+    echo "Malware sélectionné !"
     mission_create "Analyse de malware"
     ;;
-  "🏴‍☠️ CTF Practice")
+  *"CTF Practice"*)
+    echo "CTF sélectionné !"
     mission_create "CTF Practice"
     ;;
-  "🔍 Veille sécurité")
+  *"Veille sécurité"*)
+    echo "Veille sélectionnée !"
     mission_create "Veille sécurité"
     ;;
-  "📊 Statistiques")
+  *"Statistiques"*)
     stats_display
     ;;
-  "⚙️  Configuration")
+  *"Configuration"*)
     show_config_menu
     ;;
-  "🚪 Quitter")
+  *"Quitter"*)
     ui_success "Session terminée"
     exit 0
+    ;;
+  *)
+    echo "DEBUG: Choix non reconnu: '$choice'"
+    echo "DEBUG: Longueur: ${#choice} caractères"
+    printf "DEBUG: Hex dump: "
+    printf '%s' "$choice" | xxd -p
+    echo
     ;;
   esac
 }
@@ -114,20 +127,26 @@ show_config_menu() {
     ;;
   "🗂️  Voir les fichiers de configuration")
     ui_info "Dossier de configuration : $CONFIG_DIR"
-    gum input --placeholder "Appuyez sur Entrée pour continuer..."
+    gum input --placeholder "Appuyez sur Entrée pour continuer..." >/dev/null
     ;;
   esac
 }
 
 main_loop() {
   while true; do
-    ui_header "Cyber Challenge Manager"
+    ui_header "Learning Challenge Manager"
 
     # Afficher la mission en cours si elle existe
     mission_display_current
 
+    # Obtenir le choix de l'utilisateur
     local choice
-    choice=$(show_main_menu)
+    if ! choice=$(show_main_menu); then
+      ui_warning "Sélection annulée"
+      continue
+    fi
+
+    # Traiter le choix
     handle_menu_choice "$choice"
 
     echo
@@ -147,12 +166,17 @@ main() {
   # Créer les dossiers nécessaires
   mkdir -p "$CONFIG_DIR" "$BIN_DIR"
 
+  # Message de bienvenue
+  echo
+  ui_success "Learning Challenge Manager initialisé"
+  echo
+
   # Démarrer la boucle principale
   main_loop
 }
 
 # Gestion des signaux
-trap 'ui_warning "Interruption détectée. Session fermée."; exit 130' INT TERM
+trap 'echo; ui_warning "Interruption détectée. Session fermée."; exit 130' INT TERM
 
 # Lancer le programme
 main "$@"

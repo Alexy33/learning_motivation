@@ -67,7 +67,7 @@ ui_box() {
     --border double \
     --margin "1 2" \
     --padding "1 2" \
-    --border.foreground "$border_color" \
+    --border-foreground "$border_color" \
     "$title" \
     "" \
     "$content"
@@ -83,7 +83,7 @@ ui_mission_box() {
     --border double \
     --margin "1 2" \
     --padding "1 2" \
-    --border.foreground "$border_color" \
+    --border-foreground "$border_color" \
     "🎯 MISSION GÉNÉRÉE" \
     "" \
     "📋 Activité: $activity" \
@@ -103,7 +103,7 @@ ui_current_mission() {
     --border normal \
     --margin "1 0" \
     --padding "1 1" \
-    --border.foreground "$border_color" \
+    --border-foreground "$border_color" \
     "⚠️  MISSION ACTIVE" \
     "📋 $activity ($difficulty)" \
     "⏰ Temps restant: $time_remaining"
@@ -122,7 +122,7 @@ ui_stats_box() {
     --border double \
     --margin "1 2" \
     --padding "1 2" \
-    --border.foreground "#4A90E2" \
+    --border-foreground "#4A90E2" \
     "📊 STATISTIQUES DE PERFORMANCE" \
     "" \
     "🎯 Missions totales: $total" \
@@ -141,7 +141,7 @@ ui_punishment_warning() {
     --border thick \
     --margin "1 2" \
     --padding "1 2" \
-    --border.foreground "#FF0000" \
+    --border-foreground "#FF0000" \
     "💀 ÉCHEC DE MISSION DÉTECTÉ" \
     "" \
     "🚨 Pénalité: $punishment_type" \
@@ -155,7 +155,7 @@ ui_joker_available() {
     --border normal \
     --margin "1 0" \
     --padding "1 1" \
-    --border.foreground "#FFA500" \
+    --border-foreground "#FFA500" \
     "🃏 JOKER QUOTIDIEN DISPONIBLE" \
     "Changement de mission possible (1/jour)"
 }

@@ -113,7 +113,7 @@ mission_start() {
 
   echo
   ui_success "Mission démarrée ! Timer en cours d'exécution."
-  ui_info "Utilisez 'cyber-check' pour valider ou 'cyber-status' pour voir le statut."
+  ui_info "Utilisez 'learning-check' pour valider ou 'learning-status' pour voir le statut."
 
   ui_wait
 }
