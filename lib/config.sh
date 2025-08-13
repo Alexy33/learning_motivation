@@ -30,7 +30,7 @@ config_init_main() {
   if [[ ! -f "$CONFIG_FILE" ]]; then
     cat >"$CONFIG_FILE" <<EOF
 {
-    "daily_joker_used": false,
+    "jokers_used_today": 0,
     "last_joker_date": "",
     "durations": {
         "easy": $DEFAULT_EASY_DURATION,
@@ -143,23 +143,43 @@ config_set_duration() {
 }
 
 # ============================================================================
-# Gestion du joker quotidien
+# Gestion du système de jokers (3 par jour)
 # ============================================================================
 
-config_is_joker_available() {
+config_get_jokers_total() {
+  echo "3" # 3 jokers par jour
+}
+
+config_get_jokers_used() {
   local today
   today=$(date +%Y-%m-%d)
   local last_joker_date
   last_joker_date=$(config_get '.last_joker_date')
-  local joker_used
-  joker_used=$(config_get '.daily_joker_used')
 
   if [[ "$last_joker_date" != "$today" ]]; then
-    # Nouveau jour, reset du joker
-    config_set '.daily_joker_used' false
+    # Nouveau jour, reset des jokers
+    config_set '.jokers_used_today' 0
     config_set '.last_joker_date' "$today"
-    echo "true"
-  elif [[ "$joker_used" == "false" ]]; then
+    echo "0"
+  else
+    local jokers_used
+    jokers_used=$(config_get '.jokers_used_today')
+    echo "${jokers_used:-0}"
+  fi
+}
+
+config_get_jokers_available() {
+  local total used
+  total=$(config_get_jokers_total)
+  used=$(config_get_jokers_used)
+  echo $((total - used))
+}
+
+config_is_joker_available() {
+  local available
+  available=$(config_get_jokers_available)
+
+  if [[ $available -gt 0 ]]; then
     echo "true"
   else
     echo "false"
@@ -167,9 +187,12 @@ config_is_joker_available() {
 }
 
 config_use_joker() {
-  local today
+  local today used
   today=$(date +%Y-%m-%d)
-  config_set '.daily_joker_used' true
+  used=$(config_get_jokers_used)
+
+  # Incrémenter le nombre de jokers utilisés
+  config_set '.jokers_used_today' $((used + 1))
   config_set '.last_joker_date' "$today"
 }
 

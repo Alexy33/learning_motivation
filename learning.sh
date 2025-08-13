@@ -14,8 +14,8 @@ readonly LIB_DIR="$SCRIPT_DIR/lib"
 readonly BIN_DIR="$SCRIPT_DIR/bin"
 
 # Import des modules
-source "$LIB_DIR/ui.sh"
 source "$LIB_DIR/config.sh"
+source "$LIB_DIR/ui.sh"
 source "$LIB_DIR/mission.sh"
 source "$LIB_DIR/stats.sh"
 source "$LIB_DIR/timer.sh"
@@ -44,10 +44,14 @@ check_dependencies() {
 # ============================================================================
 # Menu principal unifié
 # ============================================================================
-
 show_main_menu() {
   local mission_data
   mission_data=$(config_get_current_mission)
+
+  # Afficher les jokers de sauvetage
+  local jokers_available jokers_total
+  jokers_available=$(config_get_jokers_available)
+  jokers_total=$(config_get_jokers_total)
 
   # Options de base
   local menu_options=("🎯 Challenges" "📊 Statistiques" "⚙️ Paramètres" "🚪 Quitter")
@@ -69,14 +73,21 @@ show_main_menu() {
     if [[ $remaining -gt 0 ]]; then
       local remaining_formatted
       remaining_formatted=$(format_time $remaining)
-      menu_options=("📋 Mission en cours ($remaining_formatted)" "✅ Terminer la mission" "🚨 Urgence" "💀 Peine encourue" "${menu_options[@]}")
+      menu_options=("📋 Mission en cours ($remaining_formatted)" "✅ Terminer la mission" "🚨 Urgence & Jokers" "💀 Peine encourue" "${menu_options[@]}")
     else
-      menu_options=("📋 Mission en cours (TEMPS ÉCOULÉ)" "✅ Terminer la mission" "🚨 Urgence" "💀 Peine encourue" "${menu_options[@]}")
+      menu_options=("📋 Mission en cours (TEMPS ÉCOULÉ)" "✅ Terminer la mission" "🚨 Urgence & Jokers" "💀 Peine encourue" "${menu_options[@]}")
+    fi
+  else
+    # Même sans mission, garder l'accès aux jokers pour annuler pénalités
+    if punishment_has_active_punishments &>/dev/null; then
+      menu_options=("🚨 Urgence & Jokers" "${menu_options[@]}")
     fi
   fi
 
   echo
   echo -e "${CYAN}Menu Principal - Learning Challenge Manager${NC}"
+  echo -e "${YELLOW}🃏 Jokers de sauvetage disponibles: $jokers_available/$jokers_total${NC}"
+  echo -e "${BLUE}💡 Les jokers permettent d'annuler missions/pénalités sans conséquences${NC}"
   echo
 
   # Utiliser gum pour afficher le menu
@@ -97,7 +108,7 @@ handle_main_menu() {
   *"Terminer la mission"*)
     mission_validate
     ;;
-  *"Urgence"*)
+  *"Urgence & Jokers"*)
     show_emergency_menu
     ;;
   *"Peine encourue"*)

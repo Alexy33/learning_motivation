@@ -112,8 +112,8 @@ mission_check_unique() {
     fi
 
     echo
-    ui_info "Terminez d'abord votre mission actuelle avec 'learning-check'"
-    ui_info "Ou annulez-la avec 'learning-emergency'"
+    ui_info "Terminez d'abord votre mission actuelle avec 'Terminer la mission'"
+    ui_info "Ou annulez-la avec 'Urgence'"
 
     return 1
   fi
@@ -167,7 +167,7 @@ mission_create() {
 }
 
 mission_create_tryhackme() {
-  # Pour TryHackMe, on garde le système aléatoire
+  # Pour TryHackMe, système aléatoire classique
   local difficulty
   difficulty=$(mission_get_random_difficulty)
 
@@ -181,11 +181,75 @@ mission_create_tryhackme() {
   ui_mission_box "Challenge TryHackMe" "$difficulty" "$time_formatted"
   echo
 
-  if ui_confirm "Accepter cette mission ?"; then
+  local choice
+  choice=$(gum choose \
+    --cursor="➤ " \
+    --selected.foreground="#00ff00" \
+    "✅ Accepter cette mission" \
+    "🔄 Regénérer (aléatoire)" \
+    "❌ Retour au menu")
+
+  case "$choice" in
+  *"Accepter"*)
     mission_start "Challenge TryHackMe" "$difficulty" "$duration" ""
-  else
-    mission_handle_refusal "Challenge TryHackMe" "$difficulty" "$duration" ""
-  fi
+    ;;
+  *"Regénérer"*)
+    ui_info "Nouvelle mission générée..."
+    sleep 1
+    # CORRECTION: revenir au menu de choix, pas auto-accepter
+    mission_create_tryhackme
+    ;;
+  *"Retour"*)
+    return 0
+    ;;
+  esac
+}
+
+mission_show_theme_choice() {
+  local theme_type=$1
+  local activity_name=$2
+  local diff_level=$3
+
+  # Obtenir un thème aléatoire
+  local theme
+  theme=$(mission_get_random_theme "$theme_type" "$diff_level")
+
+  local duration
+  duration=$(config_get_duration "$diff_level")
+
+  local time_formatted
+  time_formatted=$(format_time "$duration")
+
+  echo
+  ui_themed_mission_box "$activity_name" "$diff_level" "$time_formatted" "$theme"
+  echo
+
+  local choice
+  choice=$(gum choose \
+    --cursor="➤ " \
+    --selected.foreground="#00ff00" \
+    "✅ Accepter cette mission" \
+    "🔄 Nouveau thème (même difficulté)" \
+    "🔄 Changer de difficulté" \
+    "❌ Retour au menu")
+
+  case "$choice" in
+  *"Accepter"*)
+    mission_start "$activity_name" "$diff_level" "$duration" "$theme"
+    ;;
+  *"Nouveau thème"*)
+    ui_info "Nouveau thème généré..."
+    sleep 1
+    # CORRECTION: revenir au menu de choix avec nouveau thème
+    mission_show_theme_choice "$theme_type" "$activity_name" "$diff_level"
+    ;;
+  *"Changer de difficulté"*)
+    mission_create_themed "$theme_type" "$activity_name"
+    ;;
+  *"Retour"*)
+    return 0
+    ;;
+  esac
 }
 
 mission_create_themed() {
@@ -202,9 +266,15 @@ mission_create_themed() {
     --selected.foreground="#00ff00" \
     "Easy (2h)" \
     "Medium (3h)" \
-    "Hard (4h)")
+    "Hard (4h)" \
+    "↩️ Retour au menu challenges")
 
-  # Extraire juste la difficulté
+  # Gérer le retour
+  if [[ "$difficulty" == *"Retour"* ]]; then
+    return 0
+  fi
+
+  # Extraire la difficulté
   local diff_level
   case "$difficulty" in
   "Easy (2h)") diff_level="Easy" ;;
@@ -216,25 +286,8 @@ mission_create_themed() {
     ;;
   esac
 
-  # Obtenir un thème aléatoire pour cette difficulté
-  local theme
-  theme=$(mission_get_random_theme "$theme_type" "$diff_level")
-
-  local duration
-  duration=$(config_get_duration "$diff_level")
-
-  local time_formatted
-  time_formatted=$(format_time "$duration")
-
-  echo
-  ui_themed_mission_box "$activity_name" "$diff_level" "$time_formatted" "$theme"
-  echo
-
-  if ui_confirm "Accepter cette mission ?"; then
-    mission_start "$activity_name" "$diff_level" "$duration" "$theme"
-  else
-    mission_handle_themed_refusal "$activity_name" "$diff_level" "$duration" "$theme"
-  fi
+  # Fonction pour afficher et choisir le thème
+  mission_show_theme_choice "$theme_type" "$activity_name" "$diff_level"
 }
 
 mission_get_random_theme() {
@@ -246,71 +299,6 @@ mission_get_random_theme() {
   local random_key=${theme_keys[$((RANDOM % ${#theme_keys[@]}))]}
 
   echo "${themes_ref[$random_key]}"
-}
-
-# ============================================================================
-# Gestion des refus avec joker
-# ============================================================================
-
-mission_handle_refusal() {
-  local activity=$1
-  local difficulty=$2
-  local duration=$3
-  local theme=$4
-
-  if [[ "$(config_is_joker_available)" == "true" ]]; then
-    echo
-    ui_joker_available
-    echo
-
-    if ui_confirm "Utiliser votre joker quotidien pour changer de mission ?"; then
-      config_use_joker
-      if [[ "$activity" == "Challenge TryHackMe" ]]; then
-        mission_create_tryhackme
-      else
-        # Regénérer avec un nouveau thème
-        case "$activity" in
-        "Documentation CVE") mission_create_themed "CVE" "$activity" ;;
-        "Analyse de malware") mission_create_themed "MALWARE" "$activity" ;;
-        "CTF Practice") mission_create_themed "CTF" "$activity" ;;
-        "Veille sécurité") mission_create_themed "VEILLE" "$activity" ;;
-        esac
-      fi
-    else
-      mission_force_accept "$activity" "$difficulty" "$duration" "$theme"
-    fi
-  else
-    ui_error "Joker quotidien déjà utilisé !"
-    ui_warning "Vous devez accepter cette mission ou quitter."
-    echo
-
-    if ui_confirm "Forcer l'acceptation de la mission ?"; then
-      mission_start "$activity" "$difficulty" "$duration" "$theme"
-    else
-      ui_info "Mission annulée. Session fermée."
-      exit 0
-    fi
-  fi
-}
-
-mission_handle_themed_refusal() {
-  mission_handle_refusal "$@"
-}
-
-mission_force_accept() {
-  local activity=$1
-  local difficulty=$2
-  local duration=$3
-  local theme=$4
-
-  ui_warning "Aucun joker disponible. Cette mission sera forcée."
-
-  if ui_confirm "Continuer quand même ?"; then
-    mission_start "$activity" "$difficulty" "$duration" "$theme"
-  else
-    ui_info "Session fermée."
-    exit 0
-  fi
 }
 
 # ============================================================================
@@ -348,7 +336,7 @@ mission_start() {
 
   echo
   ui_success "Mission démarrée ! Timer en cours d'exécution."
-  ui_info "Utilisez 'learning-check' pour valider ou 'learning-status' pour voir le statut."
+  ui_info "Revenez au menu principal pour suivre votre progression."
 
   ui_wait
 }
@@ -396,7 +384,7 @@ mission_display_current() {
 }
 
 # ============================================================================
-# Validation et complétion
+# Validation et complétion avec navigation améliorée
 # ============================================================================
 
 mission_validate() {
@@ -405,6 +393,7 @@ mission_validate() {
 
   if [[ "$mission_data" == "null" ]] || [[ -z "$mission_data" ]]; then
     ui_error "Aucune mission active à valider"
+    ui_wait
     return 1
   fi
 
@@ -429,10 +418,23 @@ mission_validate() {
   ui_box "📋 MISSION À VALIDER" "$validation_content" "#FFA500"
 
   echo
-  if ui_confirm "Avez-vous terminé cette mission avec succès ?"; then
+
+  # Menu de validation avec possibilité de retour
+  local validation_choice
+  validation_choice=$(gum choose \
+    --cursor="➤ " \
+    --selected.foreground="#00ff00" \
+    "✅ Mission terminée avec succès" \
+    "❌ Mission non terminée/échouée" \
+    "↩️ Retour au menu principal (sans valider)")
+
+  case "$validation_choice" in
+  *"terminée avec succès"*)
     mission_complete_success "$activity" "$difficulty" $elapsed
-  else
+    ;;
+  *"non terminée"*)
     ui_info "Mission marquée comme non terminée."
+    echo
 
     if [[ $elapsed -ge $duration ]]; then
       ui_warning "Temps imparti dépassé. Application des pénalités..."
@@ -441,7 +443,12 @@ mission_validate() {
       ui_info "Mission annulée (dans les temps). Pas de pénalité."
       mission_cancel
     fi
-  fi
+    ;;
+  *"Retour"*)
+    ui_info "Validation annulée. Mission toujours active."
+    return 0
+    ;;
+  esac
 }
 
 mission_complete_success() {
@@ -556,5 +563,201 @@ mission_emergency_cancel() {
     ui_info "Aucune pénalité appliquée pour cette annulation d'urgence."
   else
     ui_info "Annulation d'urgence annulée."
+  fi
+}
+
+# ============================================================================
+# NOUVEAU : Menu d'urgence avec jokers
+# ============================================================================
+show_emergency_menu() {
+  ui_header "🚨 MODE URGENCE"
+
+  local jokers_available jokers_total
+  jokers_available=$(config_get_jokers_available)
+  jokers_total=$(config_get_jokers_total)
+
+  ui_info "🃏 Jokers de sauvetage disponibles: $jokers_available/$jokers_total"
+  echo
+
+  local mission_data
+  mission_data=$(config_get_current_mission)
+
+  local emergency_options=()
+
+  # Options selon l'état
+  if [[ "$mission_data" != "null" ]] && [[ -n "$mission_data" ]]; then
+    if [[ $jokers_available -gt 0 ]]; then
+      emergency_options+=("🃏 Utiliser un joker - Annuler mission SANS pénalité")
+    fi
+    emergency_options+=("💀 Abandonner mission AVEC pénalités")
+  fi
+
+  # Vérifier pénalités actives
+  if punishment_has_active_punishments; then
+    if [[ $jokers_available -gt 0 ]]; then
+      emergency_options+=("🃏 Utiliser un joker - Annuler toutes les pénalités")
+    fi
+    emergency_options+=("📋 Voir les pénalités en cours")
+  fi
+
+  # Options toujours disponibles
+  emergency_options+=("🔧 Réinitialisation complète du système")
+  emergency_options+=("📊 Diagnostic système")
+  emergency_options+=("↩️ Retour au menu principal")
+
+  # Afficher info sur les jokers
+  if [[ $jokers_available -eq 0 ]]; then
+    ui_warning "⚠️ Plus de jokers ! Abandon = pénalités garanties"
+    echo
+  fi
+
+  local emergency_choice
+  emergency_choice=$(gum choose \
+    --cursor="➤ " \
+    --selected.foreground="#ff0000" \
+    --cursor.foreground="#ff0000" \
+    "${emergency_options[@]}")
+
+  case "$emergency_choice" in
+  *"Annuler mission SANS pénalité"*)
+    emergency_cancel_mission_with_joker
+    ;;
+  *"Annuler toutes les pénalités"*)
+    emergency_cancel_punishments_with_joker
+    ;;
+  *"Abandonner mission AVEC pénalités"*)
+    emergency_force_cancel_mission
+    ;;
+  *"Voir les pénalités"*)
+    punishment_list_active
+    ui_wait
+    ;;
+  *"Réinitialisation complète"*)
+    emergency_full_reset
+    ;;
+  *"Diagnostic système"*)
+    emergency_system_status
+    ;;
+  *"Retour"*)
+    return
+    ;;
+  esac
+
+  echo
+  ui_wait
+}
+
+emergency_cancel_mission_with_joker() {
+  ui_warning "🃏 UTILISATION D'UN JOKER DE SAUVETAGE"
+  ui_info "Cette action va annuler votre mission actuelle SANS appliquer de pénalité."
+  echo
+
+  local jokers_remaining
+  jokers_remaining=$(($(config_get_jokers_available) - 1))
+
+  ui_warning "Jokers restants après cette action: $jokers_remaining/3"
+  echo
+
+  if ui_confirm "Utiliser un joker pour annuler la mission sans pénalité ?"; then
+    config_use_joker
+    config_clear_mission
+
+    ui_success "🎉 Mission annulée sans pénalité grâce au joker !"
+    ui_info "Votre joker a été consommé. Jokers restants: $jokers_remaining/3"
+  else
+    ui_info "Joker non utilisé."
+  fi
+}
+
+emergency_cancel_punishments_with_joker() {
+  ui_warning "🃏 UTILISATION D'UN JOKER DE SAUVETAGE"
+  ui_info "Cette action va annuler TOUTES les pénalités en cours."
+  echo
+
+  punishment_list_active
+  echo
+
+  local jokers_remaining
+  jokers_remaining=$(($(config_get_jokers_available) - 1))
+
+  ui_warning "Jokers restants après cette action: $jokers_remaining/3"
+  echo
+
+  if ui_confirm "Utiliser un joker pour annuler toutes les pénalités ?"; then
+    config_use_joker
+    punishment_emergency_stop
+
+    ui_success "🎉 Toutes les pénalités ont été annulées grâce au joker !"
+    ui_info "Votre joker a été consommé. Jokers restants: $jokers_remaining/3"
+  else
+    ui_info "Joker non utilisé."
+  fi
+}
+
+emergency_force_cancel_mission() {
+  ui_error "🛑 ABANDON DE MISSION SANS JOKER"
+  ui_warning "Cette action va appliquer les pénalités d'échec de mission."
+  echo
+
+  local mission_data
+  mission_data=$(config_get_current_mission)
+
+  if [[ "$mission_data" != "null" ]] && [[ -n "$mission_data" ]]; then
+    local activity difficulty
+    activity=$(echo "$mission_data" | jq -r '.activity')
+    difficulty=$(echo "$mission_data" | jq -r '.difficulty')
+
+    ui_box "💀 CONSÉQUENCES DE L'ABANDON" \
+      "Mission: $activity ($difficulty)|Status: Sera marquée comme échouée|Pénalité: Application d'une pénalité aléatoire|Durée: 30-60 minutes selon le type||Types possibles:|🔒 Verrouillage d'écran|🌐 Restriction réseau|🚫 Blocage de sites|🖼️ Wallpaper motivationnel|📢 Notifications de rappel|🖱️ Réduction sensibilité souris" \
+      "#FF0000"
+
+    echo
+    ui_warning "⚠️ DERNIÈRE CHANCE: Vous pouvez retourner à votre mission !"
+    echo
+  fi
+
+  local final_choice
+  final_choice=$(gum choose \
+    --cursor="➤ " \
+    --selected.foreground="#ff0000" \
+    "💀 Confirmer l'abandon AVEC pénalités" \
+    "↩️ Retourner à ma mission (annuler abandon)")
+
+  case "$final_choice" in
+  *"Confirmer l'abandon"*)
+    if [[ "$mission_data" != "null" ]] && [[ -n "$mission_data" ]]; then
+      local activity difficulty
+      activity=$(echo "$mission_data" | jq -r '.activity')
+      difficulty=$(echo "$mission_data" | jq -r '.difficulty')
+
+      # Marquer comme échouée et appliquer pénalités
+      config_fail_mission
+      stats_record_completion "$activity" false "$difficulty"
+      config_clear_mission
+
+      ui_error "Mission abandonnée et marquée comme échouée."
+
+      # Appliquer la pénalité
+      punishment_apply_random
+    fi
+    ;;
+  *"Retourner"*)
+    ui_success "Sage décision ! Retournez terminer votre mission."
+    ;;
+  esac
+}
+
+# ============================================================================
+# Fonction utilitaire pour vérifier les pénalités actives
+# ============================================================================
+
+punishment_has_active_punishments() {
+  # Vérifier s'il y a des pénalités en cours
+  if [[ -f "$CONFIG_DIR/network_restricted.txt" ]] ||
+    [[ -f "$CONFIG_DIR/wallpaper_backup.info" ]] ||
+    pgrep -f "punishment.*notification_spam" &>/dev/null; then
+    return 0 # Il y a des pénalités
+  else
+    return 1 # Pas de pénalités
   fi
 }
