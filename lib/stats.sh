@@ -11,28 +11,31 @@
 stats_record_completion() {
   local activity=$1
   local success=$2 # true/false
+  local difficulty=${3:-"Unknown"}
 
   local temp_file
   temp_file=$(mktemp)
 
   if [[ "$success" == "true" ]]; then
     # Mission réussie
-    jq --arg activity "$activity" '
+    jq --arg activity "$activity" --arg difficulty "$difficulty" '
             .total_missions += 1 |
             .completed += 1 |
             .current_streak += 1 |
             .best_streak = ([.best_streak, .current_streak] | max) |
             .last_mission_date = (now | strftime("%Y-%m-%d")) |
-            .activity_stats[$activity].completed += 1
+            .activity_stats[$activity].completed += 1 |
+            .difficulty_stats[$difficulty].completed += 1
         ' "$STATS_FILE" >"$temp_file"
   else
     # Mission échouée
-    jq --arg activity "$activity" '
+    jq --arg activity "$activity" --arg difficulty "$difficulty" '
             .total_missions += 1 |
             .failed += 1 |
             .current_streak = 0 |
             .last_mission_date = (now | strftime("%Y-%m-%d")) |
-            .activity_stats[$activity].failed += 1
+            .activity_stats[$activity].failed += 1 |
+            .difficulty_stats[$difficulty].failed += 1
         ' "$STATS_FILE" >"$temp_file"
   fi
 
@@ -69,11 +72,18 @@ stats_display() {
   stats_display_by_activity
 
   echo
+  ui_divider
+  echo
+
+  # Statistiques par difficulté
+  stats_display_by_difficulty
+
+  echo
   ui_wait
 }
 
 stats_display_by_activity() {
-  ui_info "Statistiques par activité :"
+  ui_info "📊 Statistiques par activité :"
   echo
 
   local activities=("Challenge TryHackMe" "Documentation CVE" "Analyse de malware" "CTF Practice" "Veille sécurité")
@@ -91,6 +101,29 @@ stats_display_by_activity() {
         "$activity" "$completed" "$failed" "$rate"
     else
       printf "  %-20s: Aucune mission effectuée\n" "$activity"
+    fi
+  done
+}
+
+stats_display_by_difficulty() {
+  ui_info "⚡ Statistiques par difficulté :"
+  echo
+
+  local difficulties=("Easy" "Medium" "Hard")
+
+  for difficulty in "${difficulties[@]}"; do
+    local completed failed
+    completed=$(jq -r --arg difficulty "$difficulty" '.difficulty_stats[$difficulty].completed // 0' "$STATS_FILE")
+    failed=$(jq -r --arg difficulty "$difficulty" '.difficulty_stats[$difficulty].failed // 0' "$STATS_FILE")
+    local total=$((completed + failed))
+
+    if [[ $total -gt 0 ]]; then
+      local rate
+      rate=$(echo "scale=1; $completed * 100 / $total" | bc -l 2>/dev/null || echo "0")
+      printf "  %-10s: %2d complétées, %2d échouées (%s%%)\n" \
+        "$difficulty" "$completed" "$failed" "$rate"
+    else
+      printf "  %-10s: Aucune mission effectuée\n" "$difficulty"
     fi
   done
 }
@@ -116,6 +149,26 @@ stats_get_activity_performance() {
   local completed failed
   completed=$(jq -r --arg activity "$activity" '.activity_stats[$activity].completed // 0' "$STATS_FILE")
   failed=$(jq -r --arg activity "$activity" '.activity_stats[$activity].failed // 0' "$STATS_FILE")
+  local total=$((completed + failed))
+
+  echo "completed:$completed"
+  echo "failed:$failed"
+  echo "total:$total"
+
+  if [[ $total -gt 0 ]]; then
+    local rate
+    rate=$(echo "scale=2; $completed * 100 / $total" | bc -l)
+    echo "rate:$rate"
+  else
+    echo "rate:0"
+  fi
+}
+
+stats_get_difficulty_performance() {
+  local difficulty=$1
+  local completed failed
+  completed=$(jq -r --arg difficulty "$difficulty" '.difficulty_stats[$difficulty].completed // 0' "$STATS_FILE")
+  failed=$(jq -r --arg difficulty "$difficulty" '.difficulty_stats[$difficulty].failed // 0' "$STATS_FILE")
   local total=$((completed + failed))
 
   echo "completed:$completed"
@@ -161,6 +214,11 @@ stats_reset() {
         "Analyse de malware": {"completed": 0, "failed": 0},
         "CTF Practice": {"completed": 0, "failed": 0},
         "Veille sécurité": {"completed": 0, "failed": 0}
+    },
+    "difficulty_stats": {
+        "Easy": {"completed": 0, "failed": 0},
+        "Medium": {"completed": 0, "failed": 0},
+        "Hard": {"completed": 0, "failed": 0}
     }
 }
 EOF
@@ -219,6 +277,13 @@ stats_check_achievements() {
     achievements+=("⚡ Déterminé (14 jours consécutifs)")
   elif [[ $best_streak -ge 7 ]]; then
     achievements+=("💪 Constant (7 jours consécutifs)")
+  fi
+
+  # Badges par difficulté
+  local hard_completed
+  hard_completed=$(jq -r '.difficulty_stats.Hard.completed // 0' "$STATS_FILE")
+  if [[ $hard_completed -ge 10 ]]; then
+    achievements+=("💀 Maître Hard (10 missions Hard)")
   fi
 
   if [[ ${#achievements[@]} -gt 0 ]]; then

@@ -45,6 +45,10 @@ config_init_main() {
     "notifications": {
         "enabled": true,
         "sound": true
+    },
+    "mission_settings": {
+        "enforce_unique": true,
+        "auto_theme_generation": true
     }
 }
 EOF
@@ -67,6 +71,11 @@ config_init_stats() {
         "Analyse de malware": {"completed": 0, "failed": 0},
         "CTF Practice": {"completed": 0, "failed": 0},
         "Veille sécurité": {"completed": 0, "failed": 0}
+    },
+    "difficulty_stats": {
+        "Easy": {"completed": 0, "failed": 0},
+        "Medium": {"completed": 0, "failed": 0},
+        "Hard": {"completed": 0, "failed": 0}
     }
 }
 EOF
@@ -165,29 +174,47 @@ config_use_joker() {
 }
 
 # ============================================================================
-# Gestion des missions
+# Gestion des missions avec support des thèmes
 # ============================================================================
 
 config_save_mission() {
   local activity=$1
   local difficulty=$2
   local duration=$3
+  local theme=${4:-""}
   local start_time
   start_time=$(date +%s)
 
   local mission_data
-  mission_data=$(jq -n \
-    --arg activity "$activity" \
-    --arg difficulty "$difficulty" \
-    --arg start_time "$start_time" \
-    --arg duration "$duration" \
-    '{
-            activity: $activity,
-            difficulty: $difficulty,
-            start_time: ($start_time | tonumber),
-            duration: ($duration | tonumber),
-            status: "active"
-        }')
+  if [[ -n "$theme" ]]; then
+    mission_data=$(jq -n \
+      --arg activity "$activity" \
+      --arg difficulty "$difficulty" \
+      --arg start_time "$start_time" \
+      --arg duration "$duration" \
+      --arg theme "$theme" \
+      '{
+                activity: $activity,
+                difficulty: $difficulty,
+                start_time: ($start_time | tonumber),
+                duration: ($duration | tonumber),
+                theme: $theme,
+                status: "active"
+            }')
+  else
+    mission_data=$(jq -n \
+      --arg activity "$activity" \
+      --arg difficulty "$difficulty" \
+      --arg start_time "$start_time" \
+      --arg duration "$duration" \
+      '{
+                activity: $activity,
+                difficulty: $difficulty,
+                start_time: ($start_time | tonumber),
+                duration: ($duration | tonumber),
+                status: "active"
+            }')
+  fi
 
   echo "$mission_data" >"$MISSION_FILE"
 }
@@ -269,10 +296,7 @@ config_is_timer_running() {
 config_modify_durations() {
   ui_header "Configuration des durées"
 
-  local current_easy
-  local current_medium
-  local current_hard
-
+  local current_easy current_medium current_hard
   current_easy=$(config_get_duration "easy")
   current_medium=$(config_get_duration "medium")
   current_hard=$(config_get_duration "hard")
@@ -318,9 +342,7 @@ config_modify_single_duration() {
 
   ui_info "Durée actuelle pour $difficulty: $current_formatted"
 
-  local hours
-  local minutes
-
+  local hours minutes
   hours=$(ui_input "Heures (0-23)" "$(echo "$current_duration / 3600" | bc)")
   minutes=$(ui_input "Minutes (0-59)" "$(echo "($current_duration % 3600) / 60" | bc)")
 

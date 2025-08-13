@@ -14,8 +14,8 @@ readonly LIB_DIR="$SCRIPT_DIR/lib"
 readonly BIN_DIR="$SCRIPT_DIR/bin"
 
 # Import des modules
-source "$LIB_DIR/config.sh"
 source "$LIB_DIR/ui.sh"
+source "$LIB_DIR/config.sh"
 source "$LIB_DIR/mission.sh"
 source "$LIB_DIR/stats.sh"
 source "$LIB_DIR/timer.sh"

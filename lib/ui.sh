@@ -15,7 +15,7 @@ readonly BOLD='\033[1m'
 readonly NC='\033[0m'
 
 # ============================================================================
-# Fonctions d'affichage
+# Fonctions d'affichage de base
 # ============================================================================
 
 ui_clear() {
@@ -57,15 +57,24 @@ ui_divider() {
   echo -e "${BLUE}────────────────────────────────────────────────────────────${NC}"
 }
 
-# Affichage stylé avec gum
+# ============================================================================
+# Fonction ui_box améliorée pour gérer les séparateurs
+# ============================================================================
+
 ui_box() {
   local title=$1
   local content=$2
   local border_color=${3:-"#4A90E2"}
 
-  # Séparer le contenu par les \n
-  local lines
-  IFS=$'\n' read -ra lines <<<"$(echo -e "$content")"
+  # Remplacer les | par des lignes séparées
+  local formatted_content
+  formatted_content=$(echo "$content" | sed 's/|/\n/g')
+
+  # Passer chaque ligne comme argument séparé
+  local lines=()
+  while IFS= read -r line; do
+    lines+=("$line")
+  done <<<"$formatted_content"
 
   gum style \
     --border double \
@@ -97,6 +106,28 @@ ui_mission_box() {
     "💀 Échec = Pénalité appliquée"
 }
 
+ui_themed_mission_box() {
+  local activity=$1
+  local difficulty=$2
+  local time=$3
+  local theme=$4
+  local border_color="#FF6B6B"
+
+  gum style \
+    --border double \
+    --margin "1 2" \
+    --padding "1 2" \
+    --border-foreground "$border_color" \
+    "🎯 MISSION THÉMATIQUE GÉNÉRÉE" \
+    "" \
+    "📋 Activité: $activity" \
+    "⚡ Difficulté: $difficulty" \
+    "⏰ Temps imparti: $time" \
+    "🎨 Thème: $theme" \
+    "" \
+    "💀 Échec = Pénalité appliquée"
+}
+
 ui_current_mission() {
   local activity=$1
   local difficulty=$2
@@ -110,6 +141,25 @@ ui_current_mission() {
     --border-foreground "$border_color" \
     "⚠️  MISSION ACTIVE" \
     "📋 $activity ($difficulty)" \
+    "⏰ Temps restant: $time_remaining"
+  echo
+}
+
+ui_current_mission_with_theme() {
+  local activity=$1
+  local difficulty=$2
+  local time_remaining=$3
+  local theme=$4
+  local border_color="#FFA500"
+
+  gum style \
+    --border normal \
+    --margin "1 0" \
+    --padding "1 1" \
+    --border-foreground "$border_color" \
+    "⚠️  MISSION THÉMATIQUE ACTIVE" \
+    "📋 $activity ($difficulty)" \
+    "🎨 Thème: $theme" \
     "⏰ Temps restant: $time_remaining"
   echo
 }
