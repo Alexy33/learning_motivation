@@ -48,7 +48,7 @@ show_main_menu() {
   local mission_data
   mission_data=$(config_get_current_mission)
 
-  # Afficher les jokers de sauvetage
+  # Afficher les jokers de sauvetage avec plus d'infos
   local jokers_available jokers_total
   jokers_available=$(config_get_jokers_available)
   jokers_total=$(config_get_jokers_total)
@@ -86,8 +86,15 @@ show_main_menu() {
 
   echo
   echo -e "${CYAN}Menu Principal - Learning Challenge Manager${NC}"
-  echo -e "${YELLOW}🃏 Jokers de sauvetage disponibles: $jokers_available/$jokers_total${NC}"
-  echo -e "${BLUE}💡 Les jokers permettent d'annuler missions/pénalités sans conséquences${NC}"
+
+  # Affichage amélioré des jokers
+  if [[ $jokers_available -gt 0 ]]; then
+    echo -e "${GREEN}🃏 Jokers de sauvetage: $jokers_available/$jokers_total disponibles${NC}"
+    echo -e "${BLUE}💡 Annulez missions/pénalités sans conséquences${NC}"
+  else
+    echo -e "${RED}🃏 Jokers de sauvetage: $jokers_available/$jokers_total (épuisés)${NC}"
+    echo -e "${YELLOW}⏰ Rechargement automatique demain${NC}"
+  fi
   echo
 
   # Utiliser gum pour afficher le menu
@@ -270,34 +277,78 @@ show_current_mission_details() {
 # ============================================================================
 # Menu d'urgence
 # ============================================================================
-
 show_emergency_menu() {
   ui_header "🚨 MODE URGENCE"
-  ui_warning "Utilisez ces options uniquement en cas de problème grave !"
+
+  local jokers_available jokers_total
+  jokers_available=$(config_get_jokers_available)
+  jokers_total=$(config_get_jokers_total)
+
+  ui_info "🃏 Jokers de sauvetage disponibles: $jokers_available/$jokers_total"
+  ui_warning "⚡ Les jokers permettent d'annuler missions/pénalités SANS conséquences"
   echo
+
+  local mission_data
+  mission_data=$(config_get_current_mission)
+
+  local emergency_options=()
+
+  # Options selon l'état
+  if [[ "$mission_data" != "null" ]] && [[ -n "$mission_data" ]]; then
+    if [[ $jokers_available -gt 0 ]]; then
+      emergency_options+=("🃏 Utiliser un joker - Annuler mission SANS pénalité")
+    fi
+    emergency_options+=("💀 Abandonner mission AVEC pénalités")
+  fi
+
+  # Vérifier pénalités actives
+  if punishment_has_active_punishments; then
+    if [[ $jokers_available -gt 0 ]]; then
+      emergency_options+=("🃏 Utiliser un joker - Annuler toutes les pénalités")
+    fi
+    emergency_options+=("📋 Voir les pénalités en cours")
+  fi
+
+  # Options toujours disponibles
+  emergency_options+=("🔧 Réinitialisation complète du système")
+  emergency_options+=("📊 Diagnostic système")
+  emergency_options+=("↩️ Retour au menu principal")
+
+  # Afficher info sur les jokers selon la situation
+  if [[ $jokers_available -eq 0 ]]; then
+    ui_warning "⚠️ Plus de jokers ! Abandon = pénalités garanties"
+    ui_info "💡 Les jokers se rechargent chaque jour (3 par jour)"
+    echo
+  else
+    ui_info "💡 Utilisez vos jokers sagement - ils se rechargent quotidiennement"
+    echo
+  fi
 
   local emergency_choice
   emergency_choice=$(gum choose \
     --cursor="➤ " \
     --selected.foreground="#ff0000" \
     --cursor.foreground="#ff0000" \
-    "🛑 Arrêter mission actuelle" \
-    "💀 Stopper toutes les pénalités" \
-    "🔧 Réinitialisation complète" \
-    "📊 Voir l'état du système" \
-    "↩️ Retour au menu principal")
+    "${emergency_options[@]}")
 
   case "$emergency_choice" in
-  *"Arrêter mission"*)
-    mission_emergency_cancel
+  *"Annuler mission SANS pénalité"*)
+    emergency_cancel_mission_with_joker
     ;;
-  *"Stopper toutes les pénalités"*)
-    punishment_emergency_stop
+  *"Annuler toutes les pénalités"*)
+    emergency_cancel_punishments_with_joker
+    ;;
+  *"Abandonner mission AVEC pénalités"*)
+    emergency_force_cancel_mission
+    ;;
+  *"Voir les pénalités"*)
+    punishment_list_active
+    ui_wait
     ;;
   *"Réinitialisation complète"*)
-    emergency_full_reset
+    emergency_full_reset_with_confirmation
     ;;
-  *"état du système"*)
+  *"Diagnostic système"*)
     emergency_system_status
     ;;
   *"Retour"*)
@@ -307,6 +358,151 @@ show_emergency_menu() {
 
   echo
   ui_wait
+}
+
+emergency_force_cancel_mission() {
+  ui_error "💀 ABANDON DE MISSION SANS JOKER"
+  ui_warning "Cette action va appliquer immédiatement les pénalités d'échec !"
+  echo
+
+  local mission_data
+  mission_data=$(config_get_current_mission)
+
+  if [[ "$mission_data" != "null" ]] && [[ -n "$mission_data" ]]; then
+    local activity difficulty
+    activity=$(echo "$mission_data" | jq -r '.activity')
+    difficulty=$(echo "$mission_data" | jq -r '.difficulty')
+
+    ui_box "💀 CONSÉQUENCES DE L'ABANDON" \
+      "Mission: $activity ($difficulty)|Statut: Sera marquée comme ÉCHOUÉE|Pénalité: Application IMMÉDIATE d'une pénalité|Durée: 30-60 minutes selon le type||Types possibles:|🔒 Verrouillage d'écran|🌐 Restriction réseau|🚫 Blocage de sites|🖼️ Wallpaper motivationnel|📢 Notifications de rappel|🖱️ Réduction sensibilité souris||⚠️ CETTE ACTION EST IRRÉVERSIBLE" \
+      "#FF0000"
+
+    echo
+    ui_error "💡 SUGGESTION: Retournez terminer votre mission ou attendez d'avoir un joker !"
+    echo
+  fi
+
+  # Double confirmation pour être sûr
+  if ui_confirm "Êtes-vous ABSOLUMENT sûr de vouloir abandonner AVEC pénalités ?"; then
+    ui_error "⚠️ DERNIÈRE CHANCE ! Voulez-vous vraiment subir une pénalité ?"
+
+    local final_choice
+    final_choice=$(gum choose \
+      --cursor="➤ " \
+      --selected.foreground="#ff0000" \
+      "💀 OUI, appliquer les pénalités maintenant" \
+      "🏃 NON, retourner à ma mission" \
+      "🕐 ATTENDRE d'avoir un joker (retour menu)")
+
+    case "$final_choice" in
+    *"OUI, appliquer"*)
+      if [[ "$mission_data" != "null" ]] && [[ -n "$mission_data" ]]; then
+        local activity difficulty
+        activity=$(echo "$mission_data" | jq -r '.activity')
+        difficulty=$(echo "$mission_data" | jq -r '.difficulty')
+
+        # Marquer comme échouée et appliquer pénalités
+        config_fail_mission
+        stats_record_completion "$activity" false "$difficulty"
+        config_clear_mission
+
+        ui_error "Mission abandonnée et marquée comme échouée."
+        ui_warning "Application immédiate des pénalités..."
+
+        # Appliquer la pénalité immédiatement
+        punishment_apply_random
+      fi
+      ;;
+    *"retourner à ma mission"*)
+      ui_success "Sage décision ! Retournez terminer votre mission."
+      ui_info "💪 Chaque effort compte pour progresser !"
+      ;;
+    *"ATTENDRE"*)
+      ui_info "Vous retournez au menu. Mission toujours active."
+      ui_info "💡 Revenez plus tard quand vous aurez récupéré un joker"
+      ;;
+    esac
+  else
+    ui_success "Abandon annulé. Votre mission reste active."
+  fi
+}
+
+emergency_full_reset_with_confirmation() {
+  ui_warning "🔧 RÉINITIALISATION COMPLÈTE DU SYSTÈME"
+  ui_error "⚠️ ATTENTION: Cette action va tout arrêter et nettoyer"
+  echo
+
+  ui_box "🚨 ACTIONS DE LA RÉINITIALISATION" \
+    "• Arrêter toutes les missions (SANS pénalité)|• Stopper toutes les pénalités en cours|• Nettoyer tous les processus système|• Restaurer les paramètres par défaut||✅ LES STATISTIQUES SERONT PRÉSERVÉES|⚠️ Cette action ne consomme PAS de joker" \
+    "#FFA500"
+
+  echo
+  ui_info "🛡️ Cette fonction est réservée aux cas de dysfonctionnement grave"
+  ui_warning "Elle ne doit PAS être utilisée pour éviter les pénalités normales"
+  echo
+
+  if ui_confirm "Effectuer une réinitialisation complète ?"; then
+    if ui_confirm "Êtes-vous CERTAIN ? Cette action va tout nettoyer."; then
+      echo
+      ui_info "Début de la réinitialisation complète..."
+
+      # Arrêter mission sans pénalité (cas exceptionnel)
+      config_clear_mission
+      ui_success "✓ Mission arrêtée"
+
+      # Stopper pénalités
+      punishment_emergency_stop >/dev/null 2>&1
+      ui_success "✓ Pénalités stoppées"
+
+      # Nettoyer processus
+      pkill -f "learning.*timer" 2>/dev/null || true
+      pkill -f "punishment" 2>/dev/null || true
+      ui_success "✓ Processus nettoyés"
+
+      # Nettoyer fichiers temporaires
+      rm -f "$CONFIG_DIR"/timer.pid
+      rm -f "$CONFIG_DIR"/current_mission.json
+      rm -f "$CONFIG_DIR"/timer_status
+      rm -f "$CONFIG_DIR"/notifications.log
+      ui_success "✓ Fichiers temporaires supprimés"
+
+      echo
+      ui_success "🎉 Réinitialisation terminée !"
+      ui_info "Le système est maintenant dans un état propre"
+    else
+      ui_info "Réinitialisation annulée"
+    fi
+  else
+    ui_info "Réinitialisation annulée"
+  fi
+}
+
+emergency_cancel_punishments_with_joker() {
+  ui_warning "🃏 UTILISATION D'UN JOKER DE SAUVETAGE"
+  ui_info "Cette action va annuler TOUTES les pénalités en cours."
+  echo
+
+  ui_box "📋 PÉNALITÉS ACTIVES" \
+    "$(punishment_get_active_list)" \
+    "#FF6B6B"
+
+  echo
+
+  local jokers_remaining
+  jokers_remaining=$(($(config_get_jokers_available) - 1))
+
+  ui_warning "Jokers restants après cette action: $jokers_remaining/3"
+  echo
+
+  if ui_confirm "Utiliser un joker pour annuler toutes les pénalités ?"; then
+    config_use_joker
+    punishment_emergency_stop
+
+    ui_success "🎉 Toutes les pénalités ont été annulées grâce au joker !"
+    ui_info "Votre joker a été consommé. Jokers restants: $jokers_remaining/3"
+  else
+    ui_info "Joker non utilisé."
+  fi
 }
 
 emergency_full_reset() {

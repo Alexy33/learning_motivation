@@ -240,11 +240,101 @@ punishment_reduce_mouse_sensitivity() {
 
   ui_error "🖱️ Sensibilité de souris réduite pour $duration minutes"
 
-  # Sauvegarder les paramètres actuels
-  punishment_backup_mouse_settings
+  # Détecter l'environnement graphique
+  if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+    punishment_reduce_mouse_wayland "$duration"
+  elif [[ -n "${DISPLAY:-}" ]]; then
+    punishment_reduce_mouse_x11 "$duration"
+  else
+    punishment_simulate_mouse_reduction "$duration"
+  fi
+}
 
-  # Réduire la sensibilité (si xinput est disponible)
+punishment_reduce_mouse_wayland() {
+  local duration=$1
+
+  ui_info "🌊 Environnement Wayland détecté"
+
+  # Pour GNOME sous Wayland
+  if command -v gsettings &>/dev/null && [[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]]; then
+    punishment_reduce_mouse_gnome_wayland "$duration"
+  # Pour KDE sous Wayland
+  elif command -v kwriteconfig5 &>/dev/null && [[ "$XDG_CURRENT_DESKTOP" == *"KDE"* ]]; then
+    punishment_reduce_mouse_kde_wayland "$duration"
+  # Pour Sway
+  elif command -v swaymsg &>/dev/null; then
+    punishment_reduce_mouse_sway "$duration"
+  else
+    # Fallback : simulation visuelle
+    punishment_simulate_mouse_reduction "$duration"
+  fi
+}
+
+punishment_reduce_mouse_gnome_wayland() {
+  local duration=$1
+
+  # Sauvegarder les paramètres actuels
+  local current_accel current_threshold
+  current_accel=$(gsettings get org.gnome.desktop.peripherals.mouse accel-profile 2>/dev/null || echo "'default'")
+  current_threshold=$(gsettings get org.gnome.desktop.peripherals.mouse speed 2>/dev/null || echo "0.0")
+
+  # Sauvegarder dans un fichier
+  cat >"$CONFIG_DIR/mouse_gnome_backup.conf" <<EOF
+accel_profile=$current_accel
+speed=$current_threshold
+EOF
+
+  # Réduire la sensibilité
+  gsettings set org.gnome.desktop.peripherals.mouse speed -0.7
+  gsettings set org.gnome.desktop.peripherals.mouse accel-profile 'flat'
+
+  ui_success "✓ Sensibilité réduite via GNOME Settings"
+
+  # Programmer la restauration
+  (
+    sleep $((duration * 60))
+    punishment_restore_mouse_gnome_wayland
+  ) &
+}
+
+punishment_reduce_mouse_kde_wayland() {
+  local duration=$1
+
+  # Sauvegarder les paramètres KDE
+  local current_accel current_threshold
+  current_accel=$(kreadconfig5 --file kcminputrc --group Mouse --key Acceleration 2>/dev/null || echo "2.0")
+  current_threshold=$(kreadconfig5 --file kcminputrc --group Mouse --key Threshold 2>/dev/null || echo "2")
+
+  cat >"$CONFIG_DIR/mouse_kde_backup.conf" <<EOF
+acceleration=$current_accel
+threshold=$current_threshold
+EOF
+
+  # Réduire la sensibilité
+  kwriteconfig5 --file kcminputrc --group Mouse --key Acceleration 0.5
+  kwriteconfig5 --file kcminputrc --group Mouse --key Threshold 1
+
+  # Recharger la configuration
+  qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
+
+  ui_success "✓ Sensibilité réduite via KDE Settings"
+
+  # Programmer la restauration
+  (
+    sleep $((duration * 60))
+    punishment_restore_mouse_kde_wayland
+  ) &
+}
+
+punishment_reduce_mouse_x11() {
+  local duration=$1
+
+  ui_info "🖥️ Environnement X11 détecté"
+
   if command -v xinput &>/dev/null; then
+    # Sauvegarder les paramètres actuels
+    punishment_backup_mouse_settings
+
     local mouse_ids
     mouse_ids=$(xinput list | grep -i mouse | grep -o 'id=[0-9]*' | cut -d= -f2)
 
@@ -256,21 +346,198 @@ punishment_reduce_mouse_sensitivity() {
       xinput set-prop "$id" "libinput Accel Speed" -0.7 2>/dev/null || true
     done
 
+    ui_success "✓ Sensibilité réduite via xinput"
+
     # Programmer la restauration
     (
       sleep $((duration * 60))
       punishment_restore_mouse_settings
     ) &
-
-    ui_info "La sensibilité de la souris sera restaurée dans $duration minutes"
   else
-    ui_warning "xinput non disponible, impossible de modifier la sensibilité"
+    punishment_simulate_mouse_reduction "$duration"
   fi
+}
+
+punishment_simulate_mouse_reduction() {
+  local duration=$1
+
+  ui_warning "⚠️ Impossible de modifier la sensibilité automatiquement"
+  ui_info "📝 SIMULATION: Réduisez manuellement votre sensibilité de souris"
+
+  # Créer un fichier de rappel visuel
+  cat >"$CONFIG_DIR/mouse_reduction_reminder.txt" <<EOF
+🖱️ PÉNALITÉ: SENSIBILITÉ SOURIS RÉDUITE
+
+Durée: $duration minutes
+Début: $(date)
+Fin prévue: $(date -d "+${duration} minutes")
+
+CONSIGNE:
+Réduisez manuellement la sensibilité de votre souris 
+dans les paramètres système pendant cette durée.
+
+Cette pénalité est basée sur l'honneur du système !
+Respectez-la pour maintenir l'efficacité motivationnelle.
+
+Instructions par environnement:
+- GNOME: Paramètres > Souris > Vitesse du pointeur
+- KDE: Paramètres système > Périphériques d'entrée > Souris
+- XFCE: Paramètres > Souris et pavé tactile > Vitesse
+EOF
+
+  ui_info "📄 Fichier de rappel créé: $CONFIG_DIR/mouse_reduction_reminder.txt"
+
+  if command -v notify-send &>/dev/null; then
+    notify-send "🖱️ Pénalité Souris" "Réduisez manuellement votre sensibilité pendant $duration minutes" --urgency=critical
+  fi
+
+  # Programmer le nettoyage et la notification de fin
+  (
+    sleep $((duration * 60))
+    rm -f "$CONFIG_DIR/mouse_reduction_reminder.txt"
+    if command -v notify-send &>/dev/null; then
+      notify-send "✅ Pénalité terminée" "Vous pouvez restaurer la sensibilité normale de votre souris"
+    fi
+  ) &
+}
+
+punishment_restore_mouse_gnome_wayland() {
+  if [[ -f "$CONFIG_DIR/mouse_gnome_backup.conf" ]]; then
+    source "$CONFIG_DIR/mouse_gnome_backup.conf"
+
+    # Restaurer les valeurs
+    gsettings set org.gnome.desktop.peripherals.mouse speed "${speed//\'/}" 2>/dev/null || true
+    gsettings set org.gnome.desktop.peripherals.mouse accel-profile "${accel_profile//\'/}" 2>/dev/null || true
+
+    rm -f "$CONFIG_DIR/mouse_gnome_backup.conf"
+  fi
+
+  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (GNOME/Wayland)."
+}
+
+punishment_restore_mouse_kde_wayland() {
+  if [[ -f "$CONFIG_DIR/mouse_kde_backup.conf" ]]; then
+    source "$CONFIG_DIR/mouse_kde_backup.conf"
+
+    # Restaurer les valeurs
+    kwriteconfig5 --file kcminputrc --group Mouse --key Acceleration "$acceleration"
+    kwriteconfig5 --file kcminputrc --group Mouse --key Threshold "$threshold"
+
+    # Recharger la configuration
+    qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
+
+    rm -f "$CONFIG_DIR/mouse_kde_backup.conf"
+  fi
+
+  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (KDE/Wayland)."
+}
+
+punishment_reduce_mouse_sway() {
+  local duration=$1
+
+  # Sauvegarder la config actuelle si elle existe
+  if [[ -f "$HOME/.config/sway/config" ]]; then
+    grep "input.*pointer" "$HOME/.config/sway/config" >"$CONFIG_DIR/mouse_sway_backup.conf" 2>/dev/null || true
+  fi
+
+  # Appliquer une sensibilité réduite temporaire
+  swaymsg input type:pointer accel_profile flat 2>/dev/null || true
+  swaymsg input type:pointer pointer_accel -0.7 2>/dev/null || true
+
+  ui_success "✓ Sensibilité réduite via Sway"
+
+  # Programmer la restauration
+  (
+    sleep $((duration * 60))
+    punishment_restore_mouse_sway
+  ) &
+}
+
+punishment_restore_mouse_sway() {
+  # Restaurer les paramètres par défaut de Sway
+  swaymsg input type:pointer accel_profile adaptive 2>/dev/null || true
+  swaymsg input type:pointer pointer_accel 0 2>/dev/null || true
+
+  rm -f "$CONFIG_DIR/mouse_sway_backup.conf"
+  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (Sway)."
+}
+
+punishment_restore_mouse_settings() {
+  if command -v xinput &>/dev/null && [[ -f "$CONFIG_DIR/mouse_devices.backup" ]]; then
+    # Restaurer les paramètres par défaut
+    local mouse_ids
+    mouse_ids=$(xinput list | grep -i mouse | grep -o 'id=[0-9]*' | cut -d= -f2)
+
+    for id in $mouse_ids; do
+      # Remettre la sensibilité par défaut
+      xinput set-prop "$id" "libinput Accel Speed" 0 2>/dev/null || true
+    done
+
+    rm -f "$CONFIG_DIR"/mouse_*.backup
+  fi
+
+  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (X11)."
+}
+
+punishment_debug_environment() {
+  ui_info "🔍 Détection de l'environnement graphique:"
+  echo "  WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-'non défini'}"
+  echo "  DISPLAY: ${DISPLAY:-'non défini'}"
+  echo "  XDG_CURRENT_DESKTOP: ${XDG_CURRENT_DESKTOP:-'non défini'}"
+  echo "  XDG_SESSION_TYPE: ${XDG_SESSION_TYPE:-'non défini'}"
+  echo ""
+
+  ui_info "🛠️ Outils disponibles:"
+  command -v gsettings >/dev/null && echo "  ✓ gsettings (GNOME)" || echo "  ✗ gsettings"
+  command -v kwriteconfig5 >/dev/null && echo "  ✓ kwriteconfig5 (KDE)" || echo "  ✗ kwriteconfig5"
+  command -v swaymsg >/dev/null && echo "  ✓ swaymsg (Sway)" || echo "  ✗ swaymsg"
+  command -v xinput >/dev/null && echo "  ✓ xinput (X11)" || echo "  ✗ xinput"
 }
 
 # ============================================================================
 # Fonctions utilitaires pour les pénalités
 # ============================================================================
+punishment_apply_random_safe() {
+  # Récupérer les paramètres de pénalité
+  local min_duration max_duration
+  min_duration=$(config_get '.punishment_settings.min_duration')
+  max_duration=$(config_get '.punishment_settings.max_duration')
+
+  # Générer une durée aléatoire
+  local duration=$((RANDOM % (max_duration - min_duration + 1) + min_duration))
+
+  # Types de pénalités disponibles selon l'environnement
+  local available_punishments=()
+
+  # Toujours disponibles
+  available_punishments+=("wallpaper_shame")
+  available_punishments+=("notification_spam")
+
+  # Selon les privilèges et outils
+  if sudo -n true 2>/dev/null; then
+    available_punishments+=("network_restriction")
+    available_punishments+=("website_block")
+  fi
+
+  # Verrouillage selon l'environnement
+  if command -v loginctl &>/dev/null || command -v xscreensaver-command &>/dev/null ||
+    command -v gnome-screensaver-command &>/dev/null || command -v swaylock &>/dev/null; then
+    available_punishments+=("lock_screen")
+  fi
+
+  # Souris seulement si supporté
+  if [[ -n "${WAYLAND_DISPLAY:-}" ]] && command -v gsettings &>/dev/null; then
+    available_punishments+=("mouse_sensitivity")
+  elif [[ -n "${DISPLAY:-}" ]] && command -v xinput &>/dev/null; then
+    available_punishments+=("mouse_sensitivity")
+  fi
+
+  # Choisir un type de pénalité aléatoire parmi les disponibles
+  local punishment_type
+  punishment_type=${available_punishments[$((RANDOM % ${#available_punishments[@]}))]}
+
+  punishment_apply "$punishment_type" "$duration"
+}
 
 punishment_simulate_network_restriction() {
   local duration=$1
@@ -467,4 +734,44 @@ punishment_emergency_stop() {
 
     ui_success "Toutes les pénalités ont été annulées."
   fi
+}
+
+punishment_get_active_list() {
+  local active_punishments=""
+  local found_any=false
+
+  # Vérifier les différents types de pénalités
+  if [[ -f "$CONFIG_DIR/network_restricted.txt" ]]; then
+    active_punishments+="🌐 Restriction réseau active|"
+    found_any=true
+  fi
+
+  if [[ -f "$CONFIG_DIR/wallpaper_backup.info" ]]; then
+    active_punishments+="🖼️ Wallpaper de la honte actif|"
+    found_any=true
+  fi
+
+  if pgrep -f "punishment.*notification_spam" &>/dev/null; then
+    active_punishments+="📢 Spam de notifications actif|"
+    found_any=true
+  fi
+
+  if [[ -f "$CONFIG_DIR/blocked_hosts" ]]; then
+    active_punishments+="🚫 Sites web bloqués|"
+    found_any=true
+  fi
+
+  if [[ -f "$CONFIG_DIR"/mouse_*.backup ]]; then
+    active_punishments+="🖱️ Sensibilité souris réduite|"
+    found_any=true
+  fi
+
+  if [[ ! $found_any ]]; then
+    active_punishments="Aucune pénalité active actuellement"
+  else
+    # Enlever le dernier |
+    active_punishments=${active_punishments%|}
+  fi
+
+  echo "$active_punishments"
 }
