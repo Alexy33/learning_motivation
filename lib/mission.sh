@@ -121,6 +121,16 @@ mission_check_unique() {
   return 0
 }
 
+mission_check_unique_silent() {
+  local mission_data
+  mission_data=$(config_get_current_mission)
+
+  if [[ "$mission_data" != "null" ]] && [[ -n "$mission_data" ]]; then
+    return 1 # Mission en cours
+  fi
+  return 0 # Pas de mission
+}
+
 # ============================================================================
 # Génération de missions par type
 # ============================================================================

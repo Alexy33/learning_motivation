@@ -1,256 +1,276 @@
 # Learning Challenge Manager
 
-Un système de gestion de tâches gamifié pour l'apprentissage en cybersécurité, inspiré des mécaniques de motivation par pénalités.
+Un système de gestion de défis d'apprentissage gamifié pour la cybersécurité, avec motivation par pénalités temporaires.
 
 ## 🎯 Concept
 
-Le Learning Challenge Manager génère des missions d'apprentissage aléatoires avec des difficultés et temps variables. En cas d'échec à terminer dans les temps, des pénalités temporaires sont appliquées pour maintenir la motivation.
+Le Learning Challenge Manager génère des missions d'apprentissage avec des difficultés et temps variables. En cas d'échec à terminer dans les temps, des pénalités temporaires motivationnelles sont appliquées.
 
 ## ✨ Fonctionnalités
 
-- **Missions aléatoires** : Challenge TryHackMe, Documentation CVE, Analyse de malware, CTF, Veille sécurité
-- **Système de difficulté** : Easy (2h), Medium (3h), Hard (4h)
-- **Joker quotidien** : Possibilité de changer de mission 1 fois par jour
-- **Pénalités motivationnelles** :
-  - Verrouillage d'écran temporaire
-  - Restriction réseau
-  - Blocage de sites distractifs
-  - Wallpaper de motivation
-  - Notifications de rappel
-  - Réduction de sensibilité souris
-- **Statistiques complètes** : Suivi des performances, séries de succès
+### 🎮 **Interface Unifiée**
+
+- **Menu principal** avec navigation contextuelle
+- **Gestion complète** depuis une seule commande
 - **Interface moderne** avec [gum](https://github.com/charmbracelet/gum)
+
+### 🎯 **Système de Missions**
+
+- **Challenge TryHackMe** : Difficulté aléatoire (Easy/Medium/Hard)
+- **Documentation CVE** : Thèmes selon difficulté choisie
+- **Analyse de malware** : Du basique au reverse engineering
+- **CTF Practice** : Web, crypto, forensics, pwn
+- **Veille sécurité** : Actualités à analyses géopolitiques
+- **Mission unique** : Une seule mission à la fois
+- **Joker quotidien** : Changer de mission 1 fois par jour
+
+### ⏰ **Gestion du Temps**
+
+- **Easy** : 2h | **Medium** : 3h | **Hard** : 4h
+- **Timer en arrière-plan** avec notifications
+- **Rappels** à 75%, 90% et 95% du temps
+
+### 💀 **Pénalités Motivationnelles**
+
+- **Verrouillage d'écran** temporaire (30-60 min)
+- **Restriction réseau** avec restauration auto
+- **Blocage sites** distractifs (YouTube, Reddit...)
+- **Wallpaper motivationnel** temporaire
+- **Notifications de rappel** périodiques
+- **Réduction sensibilité souris**
+
+### 📊 **Statistiques Complètes**
+
+- **Suivi global** : missions, taux de réussite, streaks
+- **Par activité** : performance détaillée par type
+- **Par difficulté** : analyse Easy/Medium/Hard
+- **Badges** : Apprenti, Vétéran, Centurion, Maître Hard...
 
 ## 📋 Prérequis
 
 ### Arch Linux
+
 ```bash
 sudo pacman -S gum jq bc
 ```
 
 ### Autres distributions
+
 ```bash
 # Ubuntu/Debian
 sudo apt install jq bc
-# Installer gum depuis les releases GitHub
+# Installer gum depuis https://github.com/charmbracelet/gum/releases
 
-# Fedora
+# Fedora  
 sudo dnf install jq bc
 ```
 
 ## 🚀 Installation
 
-1. **Cloner le projet**
+### Installation automatique
+
 ```bash
 git clone <repo-url> learning-challenge
 cd learning-challenge
+chmod +x install.sh
+./install.sh
 ```
 
-2. **Rendre les scripts exécutables**
+### Installation manuelle
+
 ```bash
+git clone <repo-url> learning-challenge
+cd learning-challenge
 chmod +x learning.sh
-chmod +x bin/*
-```
-
-3. **Ajouter au PATH (optionnel mais recommandé)**
-```bash
-# Ajouter à ~/.bashrc ou ~/.zshrc
-export PATH="$PATH:$(pwd)/bin"
-
-# Ou créer des liens symboliques
-sudo ln -s "$(pwd)/bin/learning-check" /usr/local/bin/
-sudo ln -s "$(pwd)/bin/learning-status" /usr/local/bin/
-sudo ln -s "$(pwd)/bin/learning-emergency" /usr/local/bin/
-```
-
-4. **Premier lancement**
-```bash
 ./learning.sh
 ```
 
 ## 🎮 Utilisation
 
-### Commandes principales
+### Lancement
 
-- `./learning.sh` - Lancer le gestionnaire principal
-- `learning-check` - Valider une mission en cours
-- `learning-status` - Voir le statut actuel
-- `learning-emergency` - Arrêt d'urgence
+```bash
+learning  # Si installé avec install.sh
+# OU
+./learning.sh  # Depuis le dossier du projet
+```
+
+### Navigation
+
+Le menu principal s'adapte selon votre état :
+
+**Sans mission active :**
+
+- 🎯 **Challenges** → Choisir un nouveau défi
+- 📊 **Statistiques** → Voir vos performances  
+- ⚙️ **Paramètres** → Configuration
+- 🚪 **Quitter**
+
+**Avec mission active :**
+
+- 📋 **Mission en cours** → Détails et progression
+- ✅ **Terminer la mission** → Validation
+- 🚨 **Urgence** → Arrêt d'urgence
+- 💀 **Peine encourue** → Info pénalités
+- 🎯 **Challenges** → (Bloqué pendant mission)
+- 📊 **Statistiques**
+- ⚙️ **Paramètres**
+- 🚪 **Quitter**
 
 ### Workflow typique
 
-1. **Démarrer une session**
-   ```bash
-   ./learning.sh
-   ```
+1. **Lancer** `learning`
+2. **Choisir** "🎯 Challenges"
+3. **Sélectionner** un type d'activité
+4. **Accepter** la mission/thème généré
+5. **Travailler** sur votre défi
+6. **Valider** avec "✅ Terminer la mission"
 
-2. **Choisir une activité** depuis le menu interactif
+## 🎯 Types de Challenges
 
-3. **Accepter la mission générée** (difficulté et temps aléatoires)
+### 🔥 Challenge TryHackMe
 
-4. **Travailler sur la mission**
+- **Système aléatoire** : Easy/Medium/Hard généré automatiquement
+- **Durées** : 2h/3h/4h selon difficulté
 
-5. **Valider en fin de session**
-   ```bash
-   learning-check
-   ```
+### 📚 Documentation CVE  
 
-### Exemples de missions
+- **Easy** : 1 CVE récente, vulnérabilité web basique
+- **Medium** : 2-3 CVE critiques, rapport avec POC
+- **Hard** : 3-5 CVE chaînées, guide mitigation complet
 
-- **Challenge TryHackMe Easy (2h)** : Résoudre une room facile
-- **Documentation CVE Medium (3h)** : Analyser et documenter 3 CVE récentes
-- **Analyse malware Hard (4h)** : Reverse engineering d'un échantillon
+### 🦠 Analyse de malware
+
+- **Easy** : Analyse statique, IoC basiques
+- **Medium** : Reverse engineering, analyse dynamique  
+- **Hard** : APT sophistiqué, unpacking avancé
+
+### 🏴‍☠️ CTF Practice
+
+- **Easy** : Web faciles, crypto basique, forensics simples
+- **Medium** : Reverse engineering, pwn avec protections
+- **Hard** : 0-day, malware obfusqué, cryptanalyse
+
+### 🔍 Veille sécurité
+
+- **Easy** : Actualités hebdo, 3 techniques d'attaque
+- **Medium** : Rapport APT, tendances mensuelles
+- **Hard** : Analyse géopolitique, prospective
 
 ## ⚙️ Configuration
 
-### Fichiers de configuration
+### Durées personnalisées
 
-- `~/.learning_challenge/config.json` - Configuration générale
-- `~/.learning_challenge/stats.json` - Statistiques de performance
-- `~/.learning_challenge/current_mission.json` - Mission active
+Menu → Paramètres → Modifier les durées par difficulté
 
-### Personnalisation des durées
+### Pénalités
 
-```bash
-./learning.sh
-# Menu Configuration > Modifier les durées par difficulté
-```
+Menu → Paramètres → Configuration des pénalités
 
-### Désactiver les pénalités
+- Activer/désactiver
+- Modifier durées min/max
 
-Éditez `~/.learning_challenge/config.json` :
-```json
-{
-  "punishment_settings": {
-    "enabled": false
-  }
-}
-```
+### Notifications  
 
-## 🔧 Fonctionnalités avancées
+Menu → Paramètres → Paramètres de notifications
 
-### Statut en temps réel
+- Activer/désactiver notifications
+- Contrôler sons d'alerte
 
-```bash
-# Statut détaillé
-learning-status
+## 📊 Statistiques
 
-# Statut simple pour scripts
-learning-status simple
-# Output: ACTIVE:TryHackMe:1h30m
-
-# Statistiques rapides
-learning-status quick
-```
-
-### Mode urgence
-
-```bash
-# Menu interactif
-learning-emergency
-
-# Arrêt rapide
-learning-emergency quick
-
-# Arrêter juste la mission
-learning-emergency quick mission
-```
-
-### Intégration dans la barre de statut
-
-Pour i3bar, waybar, etc. :
-```bash
-# Dans votre config
-"custom/learning": {
-    "exec": "learning-status simple 2>/dev/null || echo 'IDLE'",
-    "interval": 30
-}
-```
-
-## 📊 Système de statistiques
+### Métriques principales
 
 - **Missions totales** et taux de réussite
-- **Séries de succès** (streaks)
-- **Performance par activité**
-- **Badges de motivation** basés sur les performances
+- **Série actuelle** et meilleure série
+- **Performance par activité** (TryHackMe, CVE...)
+- **Performance par difficulté** (Easy, Medium, Hard)
 
-## 🛡️ Sécurité et permissions
+### Badges disponibles
 
-Certaines pénalités nécessitent des privilèges élevés :
-- **Restriction réseau** : `sudo` pour NetworkManager
-- **Blocage de sites** : `sudo` pour modifier `/etc/hosts`
+- 🥉 **Apprenti** (10 missions)
+- 🥈 **Vétéran** (50 missions)  
+- 🏆 **Centurion** (100 missions)
+- 💪 **Constant** (7 jours consécutifs)
+- ⚡ **Déterminé** (14 jours consécutifs)
+- 🔥 **Légende** (30 jours consécutifs)
+- 💀 **Maître Hard** (10 missions Hard)
 
-Les pénalités s'adaptent automatiquement si les permissions ne sont pas disponibles.
+## 🚨 Mode Urgence
 
-## 🐛 Dépannage
+En cas de problème, le menu Urgence permet :
 
-### La mission ne se lance pas
-```bash
-# Vérifier les dépendances
-which gum jq bc
+- **Arrêter mission** actuelle sans pénalité
+- **Stopper pénalités** en cours
+- **Réinitialisation complète** du système
+- **Diagnostic** état du système
 
-# Vérifier la configuration
-learning-emergency status
-```
-
-### Les pénalités ne s'appliquent pas
-```bash
-# Vérifier les permissions sudo
-sudo -n true
-
-# Mode urgence pour nettoyer
-learning-emergency reset
-```
-
-### Timer bloqué
-```bash
-# Forcer l'arrêt
-learning-emergency quick
-
-# Ou nettoyer manuellement
-pkill -f "learning.*timer"
-rm -f ~/.learning_challenge/timer.pid
-```
-
-## 🏗️ Architecture
+## 🗂️ Structure des fichiers
 
 ```
 learning-challenge/
-├── learning.sh              # Script principal
-├── bin/                      # Commandes utilitaires
-│   ├── learning-check        # Validation missions
-│   ├── learning-status       # Statut actuel
-│   └── learning-emergency    # Mode urgence
-├── lib/                      # Modules
-│   ├── config.sh            # Configuration
-│   ├── ui.sh                # Interface utilisateur
-│   ├── mission.sh           # Logique missions
-│   ├── stats.sh             # Statistiques
-│   ├── timer.sh             # Gestion temps
-│   └── punishment.sh        # Pénalités
+├── learning.sh              # Interface principale unifiée
+├── install.sh               # Installation automatique  
+├── lib/                     # Modules fonctionnels
+│   ├── config.sh           # Configuration
+│   ├── ui.sh               # Interface utilisateur
+│   ├── mission.sh          # Logique missions
+│   ├── stats.sh            # Statistiques
+│   ├── timer.sh            # Gestion temps
+│   └── punishment.sh       # Pénalités
 └── README.md
+```
+
+### Données utilisateur
+
+- `~/.learning_challenge/config.json` - Configuration
+- `~/.learning_challenge/stats.json` - Statistiques
+- `~/.learning_challenge/current_mission.json` - Mission active
+
+## 🔧 Dépannage
+
+### Installation des dépendances
+
+```bash
+# Arch Linux
+sudo pacman -S gum jq bc
+
+# Vérifier installation
+which gum jq bc
+```
+
+### Problèmes de permissions
+
+```bash
+# Pénalités nécessitent sudo pour :
+sudo systemctl stop NetworkManager  # Restriction réseau
+sudo tee -a /etc/hosts              # Blocage sites
+```
+
+### Réinitialisation
+
+```bash
+learning  # → Menu → Urgence → Réinitialisation complète
+# OU suppression manuelle
+rm -rf ~/.learning_challenge
 ```
 
 ## 🤝 Contribution
 
-Les contributions sont bienvenues ! Quelques idées :
+Idées d'améliorations :
 
 - Nouveaux types de missions
-- Pénalités créatives supplémentaires
+- Pénalités créatives supplémentaires  
 - Support d'autres environnements de bureau
-- Intégrations avec des outils spécialisés
-- Interface web/GUI
+- Intégrations avec outils spécialisés
+- Mode collaboratif/équipe
 
 ## 📝 License
 
-MIT License - Voir le fichier LICENSE pour plus de détails.
+MIT License
 
-## 🙏 Remerciements
-
-- [Charm Bracelet](https://charm.sh/) pour les outils CLI magnifiques
-- La communauté cybersécurité pour l'inspiration
-- Les mécaniques de gamification qui rendent l'apprentissage addictif
-
----
+## 🎯 Philosophie
 
 *"La discipline est le pont entre les objectifs et l'accomplissement."*
+
+Le Learning Challenge Manager transforme l'apprentissage en cybersécurité en expérience gamifiée motivante, où chaque défi completed vous rapproche de l'expertise.

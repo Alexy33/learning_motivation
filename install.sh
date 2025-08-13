@@ -71,7 +71,7 @@ check_dependencies() {
   fi
 
   # Dépendances optionnelles (pour les pénalités)
-  for dep in notify-send xinput convert; do
+  for dep in notify-send convert; do
     if ! command -v "$dep" &>/dev/null; then
       optional_deps+=("$dep")
     fi
@@ -141,8 +141,8 @@ setup_directories() {
   log_success "Dossier d'installation créé: $INSTALL_DIR"
 }
 
-install_scripts() {
-  log_info "Installation des scripts..."
+install_main_script() {
+  log_info "Installation du script principal..."
 
   # Script principal
   local main_script="$INSTALL_DIR/learning"
@@ -153,23 +153,6 @@ install_scripts() {
   sed -i "s|readonly LIB_DIR=\".*\"|readonly LIB_DIR=\"$PROJECT_DIR/lib\"|" "$main_script"
 
   log_success "Script principal installé: learning"
-
-  # Scripts utilitaires
-  local utilities=("learning-check" "learning-status" "learning-emergency")
-  for util in "${utilities[@]}"; do
-    if [[ -f "$PROJECT_DIR/bin/$util" ]]; then
-      local util_script="$INSTALL_DIR/$util"
-      cp "$PROJECT_DIR/bin/$util" "$util_script"
-      chmod +x "$util_script"
-
-      # Mettre à jour les chemins
-      sed -i "s|readonly LIB_DIR=\".*\"|readonly LIB_DIR=\"$PROJECT_DIR/lib\"|" "$util_script"
-
-      log_success "Utilitaire installé: $util"
-    else
-      log_warning "Fichier manquant: $PROJECT_DIR/bin/$util"
-    fi
-  done
 }
 
 setup_shell_integration() {
@@ -247,24 +230,27 @@ show_completion_info() {
   echo
   echo -e "${GREEN}${BOLD}🎉 Installation terminée avec succès !${NC}"
   echo
-  echo -e "${BLUE}Commandes disponibles :${NC}"
-  echo "  learning              - Lancer le gestionnaire principal"
-  echo "  learning-check        - Valider une mission"
-  echo "  learning-status       - Voir le statut"
-  echo "  learning-emergency    - Mode urgence"
-  echo
-  echo -e "${BLUE}Pour commencer :${NC}"
-  echo "  1. Rechargez votre shell: source ~/.bashrc"
+  echo -e "${BLUE}Comment utiliser :${NC}"
+  echo "  1. Rechargez votre shell: source ~/.bashrc (ou ~/.zshrc)"
   echo "  2. Lancez: learning"
   echo
+  echo -e "${BLUE}Fonctionnalités principales :${NC}"
+  echo "  🎯 Challenges: TryHackMe, CVE, Malware, CTF, Veille"
+  echo "  💀 Pénalités motivationnelles en cas d'échec"
+  echo "  📊 Statistiques complètes et badges"
+  echo "  ⚙️ Configuration personnalisable"
+  echo "  🚨 Mode urgence intégré"
+  echo
   echo -e "${BLUE}Fichiers importants :${NC}"
-  echo "  Scripts: $INSTALL_DIR/"
+  echo "  Script: $INSTALL_DIR/learning"
   echo "  Sources: $PROJECT_DIR/"
   echo "  Config: ~/.learning_challenge/"
   echo
-  echo -e "${YELLOW}Note importante :${NC}"
-  echo "  Certaines pénalités nécessitent des privilèges sudo"
-  echo "  Consultez le README pour plus d'informations"
+  echo -e "${YELLOW}Interface unifiée :${NC}"
+  echo "  Tout se fait depuis la commande 'learning'"
+  echo "  Plus besoin de commandes séparées !"
+  echo
+  echo -e "${GREEN}Prêt à commencer ? Tapez: ${BOLD}learning${NC}"
 }
 
 # ============================================================================
@@ -279,7 +265,7 @@ show_installation_menu() {
     local choice
     choice=$(gum choose \
       "🚀 Installation complète (recommandée)" \
-      "📦 Installation basique (scripts seulement)" \
+      "📦 Installation basique (script seulement)" \
       "🔧 Installation personnalisée" \
       "❌ Annuler")
 
@@ -287,7 +273,7 @@ show_installation_menu() {
     "🚀 Installation complète (recommandée)")
       return 0
       ;;
-    "📦 Installation basique (scripts seulement)")
+    "📦 Installation basique (script seulement)")
       return 1
       ;;
     "🔧 Installation personnalisée")
@@ -302,7 +288,7 @@ show_installation_menu() {
     # Fallback si gum n'est pas disponible
     echo -e "${BLUE}Types d'installation :${NC}"
     echo "1. Installation complète (recommandée)"
-    echo "2. Installation basique (scripts seulement)"
+    echo "2. Installation basique (script seulement)"
     echo "3. Installation personnalisée"
     echo "4. Annuler"
     echo
@@ -355,7 +341,7 @@ custom_installation() {
 
   # Installation de base
   setup_directories
-  install_scripts
+  install_main_script
 
   # Options personnalisées
   if $install_shell; then
@@ -376,14 +362,11 @@ custom_installation() {
 uninstall() {
   log_info "Début de la désinstallation..."
 
-  # Supprimer les scripts
-  local scripts=("learning" "learning-check" "learning-status" "learning-emergency")
-  for script in "${scripts[@]}"; do
-    if [[ -f "$INSTALL_DIR/$script" ]]; then
-      rm "$INSTALL_DIR/$script"
-      log_success "Script supprimé: $script"
-    fi
-  done
+  # Supprimer le script principal
+  if [[ -f "$INSTALL_DIR/learning" ]]; then
+    rm "$INSTALL_DIR/learning"
+    log_success "Script supprimé: learning"
+  fi
 
   # Supprimer l'entrée bureau
   local desktop_file="$HOME/.local/share/applications/learning-challenge.desktop"
@@ -464,14 +447,14 @@ main() {
     case "$install_type" in
     "complete")
       setup_directories
-      install_scripts
+      install_main_script
       setup_shell_integration
       create_desktop_entry
       run_initial_setup
       ;;
     "basic")
       setup_directories
-      install_scripts
+      install_main_script
       run_initial_setup
       ;;
     "custom")
