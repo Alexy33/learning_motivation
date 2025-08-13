@@ -63,6 +63,10 @@ ui_box() {
   local content=$2
   local border_color=${3:-"#4A90E2"}
 
+  # Séparer le contenu par les \n
+  local lines
+  IFS=$'\n' read -ra lines <<<"$(echo -e "$content")"
+
   gum style \
     --border double \
     --margin "1 2" \
@@ -70,7 +74,7 @@ ui_box() {
     --border-foreground "$border_color" \
     "$title" \
     "" \
-    "$content"
+    "${lines[@]}"
 }
 
 ui_mission_box() {
