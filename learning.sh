@@ -14,6 +14,7 @@ readonly LIB_DIR="$SCRIPT_DIR/lib"
 readonly BIN_DIR="$SCRIPT_DIR/bin"
 
 # Import des modules
+source "$LIB_DIR/admin.sh"
 source "$LIB_DIR/config.sh"
 source "$LIB_DIR/ui.sh"
 source "$LIB_DIR/mission.sh"
@@ -109,35 +110,81 @@ handle_main_menu() {
   local choice="$1"
 
   case "$choice" in
-  *"Mission en cours"*)
-    show_current_mission_details
-    ;;
-  *"Terminer la mission"*)
-    mission_validate
-    ;;
-  *"Urgence & Jokers"*)
-    show_emergency_menu
-    ;;
-  *"Peine encourue"*)
-    show_punishment_info
-    ;;
-  *"Challenges"*)
-    show_challenges_menu
-    ;;
-  *"Statistiques"*)
-    stats_display
-    ;;
-  *"Paramètres"*)
-    show_settings_menu
-    ;;
-  *"Quitter"*)
-    ui_success "Au revoir ! Session fermée."
-    exit 0
-    ;;
-  *)
-    ui_warning "Option non reconnue"
-    ;;
+    *"Mission en cours"*)
+      show_current_mission_details
+      ;;
+    *"Terminer la mission"*)
+      mission_validate
+      ;;
+    *"Urgence & Jokers"*)
+      show_emergency_menu
+      ;;
+    *"Peine encourue"*)
+      show_punishment_info
+      ;;
+    *"Challenges"*)
+      show_challenges_menu
+      ;;
+    *"Statistiques"*)
+      stats_display
+      ;;
+    *"Paramètres"*)
+      show_settings_menu
+      ;;
+    *"Quitter"*)
+      ui_success "Au revoir ! Session fermée."
+      exit 0
+      ;;
+    *)
+      ui_warning "Option non reconnue"
+      ;;
   esac
+}
+
+# ============================================================================
+# FONCTION DE DEBUG pour tester Hyprland
+# ============================================================================
+
+debug_hyprland_support() {
+  ui_header "🔍 Diagnostic Hyprland"
+  
+  echo "Environment:"
+  echo "  WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-'non défini'}"
+  echo "  XDG_CURRENT_DESKTOP: ${XDG_CURRENT_DESKTOP:-'non défini'}"
+  echo "  HYPRLAND_INSTANCE_SIGNATURE: ${HYPRLAND_INSTANCE_SIGNATURE:-'non défini'}"
+  echo ""
+  
+  echo "Outils Hyprland:"
+  if command -v hyprctl &>/dev/null; then
+    echo "  ✓ hyprctl disponible"
+    echo "    Version: $(hyprctl version | head -n1)"
+    echo "    Sensibilité actuelle: $(hyprctl getoption input:sensitivity | grep -oP 'float: \K[0-9.-]+' || echo 'N/A')"
+  else
+    echo "  ✗ hyprctl non trouvé"
+  fi
+  
+  echo ""
+  echo "Outils wallpaper:"
+  command -v swww >/dev/null && echo "  ✓ swww (recommandé)" || echo "  ✗ swww"
+  command -v hyprpaper >/dev/null && echo "  ✓ hyprpaper" || echo "  ✗ hyprpaper"  
+  command -v swaybg >/dev/null && echo "  ✓ swaybg (fallback)" || echo "  ✗ swaybg"
+  
+  echo ""
+  echo "Test sensibilité:"
+  if command -v hyprctl &>/dev/null; then
+    echo "  Test modification..."
+    local original=$(hyprctl getoption input:sensitivity | grep -oP 'float: \K[0-9.-]+' || echo "0")
+    hyprctl keyword input:sensitivity -0.5
+    sleep 1
+    local modified=$(hyprctl getoption input:sensitivity | grep -oP 'float: \K[0-9.-]+' || echo "0")
+    hyprctl keyword input:sensitivity "$original"
+    
+    if [[ "$modified" != "$original" ]]; then
+      echo "  ✅ Modification de sensibilité FONCTIONNE"
+    else
+      echo "  ❌ Modification de sensibilité ÉCHOUE"
+    fi
+  fi
 }
 
 # ============================================================================
@@ -787,6 +834,14 @@ main_loop() {
 # ============================================================================
 
 main() {
+  # Vérifier le mode admin avec gestion sécurisée des arguments
+  local first_arg="${1:-}"
+  if [[ "$first_arg" == "--admin" ]] || [[ "$first_arg" == "admin" ]]; then
+    echo "Mode admin détecté mais module non encore implémenté"
+    echo "Utilisez: ./bin/admin-emergency.sh"
+    exit 0
+  fi
+  
   check_dependencies
   config_init
 
@@ -799,8 +854,198 @@ main() {
   main_loop
 }
 
+
 # Gestion des signaux
 trap 'echo; ui_warning "Interruption détectée. Session fermée."; exit 130' INT TERM
 
 # Lancer le programme
 main "$@"
+
+# ============================================================================
+# MODE ADMIN - Système d'arrêt d'urgence des pénalités
+# ============================================================================
+
+admin_mode_check() {
+  local arg="${1:-}"  # Valeur par défaut vide si pas d'argument
+  
+  # Vérifier si l'argument --admin est passé
+  if [[ "$arg" == "--admin" ]]; then
+    admin_mode_main
+    exit 0
+  fi
+  
+  # Vérifier argument "admin"
+  if [[ "$arg" == "admin" ]]; then
+    admin_mode_main
+    exit 0
+  fi
+}
+
+# ============================================================================
+# 3. VÉRIFICATION DE L'INSTALLATION
+# ============================================================================
+
+# Script de vérification - à exécuter pour diagnostiquer les problèmes
+
+check_installation() {
+    echo "🔍 Vérification de l'installation..."
+    echo ""
+    
+    # Vérifier structure des dossiers
+    local base_dir="$(pwd)"
+    echo "📁 Répertoire actuel: $base_dir"
+    
+    local required_files=(
+        "learning.sh"
+        "lib/config.sh"
+        "lib/ui.sh"
+        "lib/mission.sh"
+        "lib/stats.sh"
+        "lib/timer.sh"
+        "lib/punishment.sh"
+    )
+    
+    echo ""
+    echo "📋 Fichiers requis:"
+    local missing_files=()
+    
+    for file in "${required_files[@]}"; do
+        if [[ -f "$file" ]]; then
+            echo "  ✅ $file"
+        else
+            echo "  ❌ $file (MANQUANT)"
+            missing_files+=("$file")
+        fi
+    done
+    
+    # Vérifier lib/admin.sh
+    echo ""
+    if [[ -f "lib/admin.sh" ]]; then
+        echo "✅ lib/admin.sh présent"
+    else
+        echo "⚠️ lib/admin.sh manquant (sera créé automatiquement)"
+    fi
+    
+    # Vérifier bin/admin-emergency.sh
+    echo ""
+    if [[ -f "bin/admin-emergency.sh" ]]; then
+        echo "✅ bin/admin-emergency.sh présent"
+    else
+        echo "⚠️ bin/admin-emergency.sh manquant"
+    fi
+    
+    # Vérifier les permissions
+    echo ""
+    echo "🔐 Permissions:"
+    if [[ -x "learning.sh" ]]; then
+        echo "  ✅ learning.sh exécutable"
+    else
+        echo "  ⚠️ learning.sh non exécutable (chmod +x learning.sh)"
+    fi
+    
+    if [[ -f "bin/admin-emergency.sh" ]] && [[ -x "bin/admin-emergency.sh" ]]; then
+        echo "  ✅ admin-emergency.sh exécutable"
+    elif [[ -f "bin/admin-emergency.sh" ]]; then
+        echo "  ⚠️ admin-emergency.sh non exécutable (chmod +x bin/admin-emergency.sh)"
+    fi
+    
+    # Résumé
+    echo ""
+    if [[ ${#missing_files[@]} -eq 0 ]]; then
+        echo "🎉 Installation correcte !"
+        echo ""
+        echo "🚀 Utilisation:"
+        echo "  Normal: ./learning.sh"
+        echo "  Admin: ./learning.sh --admin"
+        echo "  Urgence: ./bin/admin-emergency.sh"
+    else
+        echo "❌ Installation incomplète"
+        echo "Fichiers manquants: ${missing_files[*]}"
+    fi
+}
+
+repair_installation() {
+    echo "🔧 Réparation automatique..."
+    
+    # Créer les dossiers manquants
+    mkdir -p lib bin
+    
+    # Réparer les permissions
+    chmod +x learning.sh 2>/dev/null || true
+    
+    # Créer admin-emergency.sh corrigé
+    cat > bin/admin-emergency.sh << 'EMERGENCY_EOF'
+#!/bin/bash
+# Script d'urgence admin - Version corrigée
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+CONFIG_DIR="$HOME/.learning_challenge"
+LIB_DIR="$PARENT_DIR/lib"
+
+# Couleurs basiques
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+echo -e "${RED}🚨 MODE ADMIN URGENCE${NC}"
+echo ""
+
+# Codes d'accès
+ADMIN_CODES=("emergency123" "override456" "rescue789")
+
+echo "🔐 Code d'accès requis:"
+read -p "Code: " -s code
+echo ""
+
+# Vérification
+valid=false
+for valid_code in "${ADMIN_CODES[@]}"; do
+    if [[ "$code" == "$valid_code" ]]; then
+        valid=true
+        break
+    fi
+done
+
+if [[ "$valid" != "true" ]]; then
+    echo -e "${RED}❌ Code incorrect${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Accès autorisé${NC}"
+echo ""
+echo -e "${YELLOW}🚨 Arrêt d'urgence en cours...${NC}"
+
+# Arrêt des processus
+pkill -f "punishment" 2>/dev/null && echo "✓ Processus punishment arrêtés"
+pkill -f "notification_spam" 2>/dev/null && echo "✓ Notifications stoppées"
+
+# Restauration Hyprland
+if command -v hyprctl &>/dev/null; then
+    hyprctl keyword input:sensitivity 0 2>/dev/null && echo "✓ Souris Hyprland restaurée"
+fi
+
+# Nettoyage fichiers
+rm -f "$CONFIG_DIR"/mouse_*.backup 2>/dev/null && echo "✓ Backups souris supprimés"
+rm -f "$CONFIG_DIR/wallpaper_backup.info" 2>/dev/null && echo "✓ Wallpaper backup supprimé"
+rm -f "$CONFIG_DIR/network_restricted.txt" 2>/dev/null && echo "✓ Restriction réseau supprimée"
+rm -f "$CONFIG_DIR/blocked_hosts" 2>/dev/null && echo "✓ Hosts bloqués supprimés"
+rm -f "$CONFIG_DIR/mouse_reduction_reminder.txt" 2>/dev/null && echo "✓ Rappel souris supprimé"
+
+# Restauration réseau
+if sudo -n true 2>/dev/null; then
+    sudo systemctl start NetworkManager 2>/dev/null && echo "✓ NetworkManager redémarré"
+    sudo sed -i '/# Learning Challenge - Punishment Block/,/^$/d' /etc/hosts 2>/dev/null && echo "✓ Hosts restauré"
+fi
+
+echo ""
+echo -e "${GREEN}✅ ARRÊT D'URGENCE TERMINÉ${NC}"
+echo "🔄 Vous pouvez relancer: ./learning.sh"
+EMERGENCY_EOF
+
+    chmod +x bin/admin-emergency.sh
+    
+    echo "✅ Réparation terminée"
+}
+

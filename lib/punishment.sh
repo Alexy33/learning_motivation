@@ -97,6 +97,51 @@ punishment_lock_screen() {
   ) &
 }
 
+punishment_detect_environment() {
+  if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+    if [[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]]; then
+      echo "wayland_gnome"
+    elif [[ "$XDG_CURRENT_DESKTOP" == *"KDE"* ]]; then
+      echo "wayland_kde"
+    elif command -v hyprctl &>/dev/null; then
+      echo "wayland_hyprland"
+    elif command -v swaymsg &>/dev/null; then
+      echo "wayland_sway"
+    else
+      echo "wayland_other"
+    fi
+  elif [[ -n "${DISPLAY:-}" ]]; then
+    echo "x11"
+  else
+    echo "unknown"
+  fi
+}
+
+punishment_can_modify_mouse() {
+  # Hyprland
+  if command -v hyprctl &>/dev/null; then
+    return 0
+  fi
+  # Wayland avec GNOME
+  if [[ -n "${WAYLAND_DISPLAY:-}" ]] && command -v gsettings &>/dev/null && [[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]]; then
+    return 0
+  fi
+  # Wayland avec KDE
+  if [[ -n "${WAYLAND_DISPLAY:-}" ]] && command -v kwriteconfig5 &>/dev/null && [[ "$XDG_CURRENT_DESKTOP" == *"KDE"* ]]; then
+    return 0
+  fi
+  # Sway
+  if command -v swaymsg &>/dev/null; then
+    return 0
+  fi
+  # X11
+  if [[ -n "${DISPLAY:-}" ]] && command -v xinput &>/dev/null; then
+    return 0
+  fi
+
+  return 1
+}
+
 punishment_restrict_network() {
   local duration=$1
 
@@ -207,6 +252,26 @@ punishment_change_wallpaper() {
   ui_info "Le wallpaper sera restauré dans $duration minutes"
 }
 
+punishment_set_wallpaper_hyprland() {
+  local wallpaper_file=$1
+  
+  # Hyprland utilise hyprpaper ou swww généralement
+  if command -v swww &>/dev/null; then
+    swww img "$wallpaper_file" 2>/dev/null || true
+  elif command -v hyprpaper &>/dev/null; then
+    # Pour hyprpaper, on doit modifier la config temporairement
+    echo "preload = $wallpaper_file" > /tmp/hyprpaper_temp.conf
+    echo "wallpaper = ,$wallpaper_file" >> /tmp/hyprpaper_temp.conf
+    hyprpaper -c /tmp/hyprpaper_temp.conf &
+  else
+    # Fallback avec swaybg si disponible
+    if command -v swaybg &>/dev/null; then
+      pkill swaybg 2>/dev/null || true
+      swaybg -i "$wallpaper_file" &
+    fi
+  fi
+}
+
 punishment_notification_spam() {
   local duration=$1
 
@@ -240,14 +305,68 @@ punishment_reduce_mouse_sensitivity() {
 
   ui_error "🖱️ Sensibilité de souris réduite pour $duration minutes"
 
-  # Détecter l'environnement graphique
-  if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
-    punishment_reduce_mouse_wayland "$duration"
-  elif [[ -n "${DISPLAY:-}" ]]; then
+  local env
+  env=$(punishment_detect_environment)
+
+  case "$env" in
+  "wayland_hyprland")
+    punishment_reduce_mouse_hyprland "$duration"
+    ;;
+  "wayland_gnome")
+    punishment_reduce_mouse_gnome_wayland "$duration"
+    ;;
+  "wayland_kde")
+    punishment_reduce_mouse_kde_wayland "$duration"
+    ;;
+  "wayland_sway")
+    punishment_reduce_mouse_sway "$duration"
+    ;;
+  "x11")
     punishment_reduce_mouse_x11 "$duration"
-  else
+    ;;
+  *)
     punishment_simulate_mouse_reduction "$duration"
+    ;;
+  esac
+}
+
+punishment_reduce_mouse_hyprland() {
+  local duration=$1
+
+  ui_info "🌊 Configuration Hyprland détectée"
+
+  # Sauvegarder la configuration actuelle
+  local current_sensitivity
+  current_sensitivity=$(hyprctl getoption input:sensitivity | grep -oP 'float: \K[0-9.-]+' || echo "0")
+
+  echo "sensitivity=$current_sensitivity" >"$CONFIG_DIR/mouse_hyprland_backup.conf"
+
+  # Réduire la sensibilité (valeurs négatives = moins sensible)
+  hyprctl keyword input:sensitivity -0.7
+
+  ui_success "✓ Sensibilité réduite via Hyprland"
+
+  # Programmer la restauration
+  (
+    sleep $((duration * 60))
+    punishment_restore_mouse_hyprland
+  ) &
+}
+
+punishment_restore_mouse_hyprland() {
+  if [[ -f "$CONFIG_DIR/mouse_hyprland_backup.conf" ]]; then
+    source "$CONFIG_DIR/mouse_hyprland_backup.conf"
+
+    # Restaurer la sensibilité
+    hyprctl keyword input:sensitivity "$sensitivity"
+
+    rm -f "$CONFIG_DIR/mouse_hyprland_backup.conf"
+  else
+    # Restaurer la valeur par défaut
+    hyprctl keyword input:sensitivity 0
   fi
+
+  notify-send "🖱️ Souris restaurée" "Sensibilité normale rétablie (Hyprland)"
 }
 
 punishment_reduce_mouse_wayland() {
@@ -615,13 +734,18 @@ punishment_backup_wallpaper() {
 punishment_set_wallpaper() {
   local wallpaper_file=$1
 
-  # Appliquer selon l'environnement de bureau
-  if command -v gsettings &>/dev/null; then
+  # Détecter l'environnement
+  if command -v hyprctl &>/dev/null; then
+    punishment_set_wallpaper_hyprland "$wallpaper_file"
+  elif command -v gsettings &>/dev/null; then
     # GNOME
     gsettings set org.gnome.desktop.background picture-uri "file://$wallpaper_file" 2>/dev/null || true
   elif command -v xfconf-query &>/dev/null; then
     # XFCE
     xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$wallpaper_file" 2>/dev/null || true
+  elif command -v kwriteconfig5 &>/dev/null; then
+    # KDE
+    kwriteconfig5 --file kdesktoprc --group Desktop0 --key Wallpaper "$wallpaper_file" 2>/dev/null || true
   elif command -v feh &>/dev/null; then
     # Feh (environnements légers)
     feh --bg-scale "$wallpaper_file" 2>/dev/null || true

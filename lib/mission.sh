@@ -205,6 +205,36 @@ mission_create_tryhackme() {
   esac
 }
 
+# ============================================================================
+# Fonctions utilitaires manquantes
+# ============================================================================
+
+mission_get_random_difficulty() {
+  local random_index=$((RANDOM % ${#DIFFICULTIES[@]}))
+  echo "${DIFFICULTIES[$random_index]}"
+}
+
+mission_get_random_theme() {
+  local theme_type=$1
+  local difficulty=$2
+
+  local -n themes_ref="${theme_type}_THEMES_${difficulty^^}"
+  local theme_keys=(${!themes_ref[@]})
+  local random_key=${theme_keys[$((RANDOM % ${#theme_keys[@]}))]}
+
+  echo "${themes_ref[$random_key]}"
+}
+
+mission_check_unique_silent() {
+  local mission_data
+  mission_data=$(config_get_current_mission)
+
+  if [[ "$mission_data" != "null" ]] && [[ -n "$mission_data" ]]; then
+    return 1
+  fi
+  return 0
+}
+
 mission_show_theme_choice() {
   local theme_type=$1
   local activity_name=$2
@@ -404,9 +434,10 @@ mission_validate() {
   duration=$(echo "$mission_data" | jq -r '.duration')
   theme=$(echo "$mission_data" | jq -r '.theme // ""')
 
-  local current_time elapsed
+  local current_time elapsed remaining
   current_time=$(date +%s)
   elapsed=$((current_time - start_time))
+  remaining=$((duration - elapsed))
 
   ui_header "Validation de Mission"
 
@@ -415,39 +446,45 @@ mission_validate() {
     validation_content+="|Thème: $theme"
   fi
 
-  ui_box "📋 MISSION À VALIDER" "$validation_content" "#FFA500"
+  # Affichage avec statut selon le temps
+  if [[ $remaining -le 0 ]]; then
+    ui_box "⏰ MISSION EN RETARD" "$validation_content|Temps imparti: DÉPASSÉ de $(format_time $((elapsed - duration)))" "#FF0000"
+  else
+    ui_box "📋 MISSION À VALIDER" "$validation_content|Temps restant: $(format_time $remaining)" "#FFA500"
+  fi
 
   echo
 
-  # Menu de validation avec possibilité de retour
+  # Menu de validation avec avertissement si en retard
+  local validation_options=()
+  
+  if [[ $remaining -le 0 ]]; then
+    validation_options+=("✅ Mission terminée avec succès (malgré le retard)")
+    validation_options+=("❌ Mission échouée/non terminée + PÉNALITÉ")
+  else
+    validation_options+=("✅ Mission terminée avec succès")
+    validation_options+=("❌ Mission échouée/non terminée + PÉNALITÉ")
+  fi
+  
+  validation_options+=("↩️ Retour au menu principal (sans valider)")
+
   local validation_choice
   validation_choice=$(gum choose \
     --cursor="➤ " \
     --selected.foreground="#00ff00" \
-    "✅ Mission terminée avec succès" \
-    "❌ Mission non terminée/échouée" \
-    "↩️ Retour au menu principal (sans valider)")
+    "${validation_options[@]}")
 
   case "$validation_choice" in
-  *"terminée avec succès"*)
-    mission_complete_success "$activity" "$difficulty" $elapsed
-    ;;
-  *"non terminée"*)
-    ui_info "Mission marquée comme non terminée."
-    echo
-
-    if [[ $elapsed -ge $duration ]]; then
-      ui_warning "Temps imparti dépassé. Application des pénalités..."
-      mission_complete_failure "$activity" "$difficulty"
-    else
-      ui_info "Mission annulée (dans les temps). Pas de pénalité."
-      mission_cancel
-    fi
-    ;;
-  *"Retour"*)
-    ui_info "Validation annulée. Mission toujours active."
-    return 0
-    ;;
+    *"terminée avec succès"*)
+      mission_complete_success "$activity" "$difficulty" $elapsed $remaining
+      ;;
+    *"échouée/non terminée"*)
+      mission_complete_failure "$activity" "$difficulty" true
+      ;;
+    *"Retour"*)
+      ui_info "Validation annulée. Mission toujours active."
+      return 0
+      ;;
   esac
 }
 
@@ -455,6 +492,7 @@ mission_complete_success() {
   local activity=$1
   local difficulty=$2
   local elapsed=$3
+  local remaining=${4:-0}
 
   # Marquer comme complétée
   config_complete_mission
@@ -466,29 +504,32 @@ mission_complete_success() {
   config_clear_mission
 
   # Afficher le succès
-  ui_success "🎉 Mission terminée avec succès !"
+  if [[ $remaining -le 0 ]]; then
+    ui_warning "⚠️ Mission terminée en retard mais validée comme succès"
+    ui_box "✅ SUCCÈS (EN RETARD)" \
+      "Mission: $activity|Difficulté: $difficulty|Temps: $(format_time $elapsed)|Retard: $(format_time $((-remaining)))||🎯 Mission validée malgré le dépassement" \
+      "#FFA500"
+  else
+    local time_saved=$((remaining))
+    local time_saved_str=""
+    if [[ $time_saved -gt 0 ]]; then
+      time_saved_str=" ($(format_time $time_saved) d'avance !)"
+    fi
 
-  local time_saved=""
-  local mission_data
-  mission_data=$(config_get_current_mission)
-  local duration
-  duration=$(echo "$mission_data" | jq -r '.duration // 0')
-
-  if [[ $elapsed -lt $duration ]]; then
-    local saved=$((duration - elapsed))
-    time_saved=" ($(format_time $saved) d'avance !)"
+    ui_success "🎉 Mission terminée avec succès !"
+    ui_box "✅ SUCCÈS" \
+      "Mission: $activity|Difficulté: $difficulty|Temps: $(format_time $elapsed)$time_saved_str||🏆 Excellent travail !" \
+      "#00FF00"
   fi
-
-  ui_box "✅ SUCCÈS" \
-    "Mission: $activity|Difficulté: $difficulty|Temps: $(format_time $elapsed)$time_saved||🏆 Bien joué !" \
-    "#00FF00"
 
   ui_wait
 }
 
+
 mission_complete_failure() {
   local activity=$1
   local difficulty=$2
+  local force_penalty=${3:-false}
 
   # Marquer comme échouée
   config_fail_mission
@@ -499,49 +540,21 @@ mission_complete_failure() {
   # Nettoyer la mission
   config_clear_mission
 
-  # Appliquer une pénalité
+  # TOUJOURS afficher l'avertissement de pénalité
+  ui_error "💀 MISSION ÉCHOUÉE - APPLICATION DE PÉNALITÉ"
+  
+  ui_box "💀 ÉCHEC CONFIRMÉ" \
+    "Mission: $activity ($difficulty)|Statut: ÉCHOUÉE|Conséquence: Pénalité IMMÉDIATE||⚡ Application en cours..." \
+    "#FF0000"
+
+  echo
+  ui_warning "Une pénalité va être appliquée dans 3 secondes..."
+  sleep 3
+
+  # Appliquer une pénalité (TOUJOURS)
   punishment_apply_random
 
   ui_wait
-}
-
-mission_cancel() {
-  config_clear_mission
-  ui_info "Mission annulée."
-}
-
-mission_get_random_difficulty() {
-  local random_index=$((RANDOM % ${#DIFFICULTIES[@]}))
-  echo "${DIFFICULTIES[$random_index]}"
-}
-
-mission_get_status() {
-  local mission_data
-  mission_data=$(config_get_current_mission)
-
-  if [[ "$mission_data" == "null" ]] || [[ -z "$mission_data" ]]; then
-    echo "no_mission"
-    return 0
-  fi
-
-  local activity difficulty start_time duration status
-  activity=$(echo "$mission_data" | jq -r '.activity')
-  difficulty=$(echo "$mission_data" | jq -r '.difficulty')
-  start_time=$(echo "$mission_data" | jq -r '.start_time')
-  duration=$(echo "$mission_data" | jq -r '.duration')
-  status=$(echo "$mission_data" | jq -r '.status // "active"')
-
-  local current_time elapsed remaining
-  current_time=$(date +%s)
-  elapsed=$((current_time - start_time))
-  remaining=$((duration - elapsed))
-
-  echo "status:$status"
-  echo "activity:$activity"
-  echo "difficulty:$difficulty"
-  echo "elapsed:$elapsed"
-  echo "remaining:$remaining"
-  echo "duration:$duration"
 }
 
 mission_emergency_cancel() {
