@@ -8,8 +8,6 @@ readonly ADMIN_LOG="$CONFIG_DIR/admin_actions.log"
 
 # Codes d'accès admin (peuvent être changés)
 readonly ADMIN_CODES=("emergency123" "override456" "rescue789")
-readonly ADMIN_SESSION_DURATION=300  # 5 minutes
-
 
 # ============================================================================
 # Interface principale du mode admin
@@ -82,12 +80,13 @@ admin_main_menu() {
     ui_header "Mode Administrateur"
     
     # Diagnostiquer l'état actuel
-    local penalties_active
-    penalties_active=$(admin_count_active_penalties)
+    local mission_active penalties_active
+    mission_active=$(admin_has_mission && echo "OUI" || echo "NON")
+    penalties_active=$(punishment_has_active_punishments && echo "OUI" || echo "NON")
     
     ui_info "📊 État du système :"
+    echo "  Mission en cours : $mission_active"
     echo "  Pénalités actives : $penalties_active"
-    echo "  Mission en cours : $(admin_has_mission && echo "OUI" || echo "NON")"
     echo
 
     local admin_choice
@@ -96,7 +95,6 @@ admin_main_menu() {
       --selected.foreground="#ff0000" \
       --cursor.foreground="#ff0000" \
       "🚨 ARRÊT D'URGENCE - Stopper TOUTES les pénalités" \
-      "🔍 Diagnostic complet du système" \
       "📋 Voir les pénalités actives détaillées" \
       "🗑️ Nettoyer tous les fichiers temporaires" \
       "📜 Voir le journal admin" \
@@ -107,11 +105,9 @@ admin_main_menu() {
       *"ARRÊT D'URGENCE"*)
         admin_emergency_stop_all
         ;;
-      *"Diagnostic complet"*)
-        admin_full_diagnostic
-        ;;
       *"pénalités actives"*)
-        admin_show_active_penalties
+        punishment_list_active
+        ui_wait
         ;;
       *"Nettoyer tous"*)
         admin_cleanup_all
@@ -160,31 +156,12 @@ admin_emergency_stop_all() {
       stopped_count=$((stopped_count + 1))
     fi
 
-    # 2. Restaurer la souris
-    if admin_restore_mouse_all; then
-      ui_success "✓ Sensibilité souris restaurée"
-      stopped_count=$((stopped_count + 1))
-    fi
+    # 2. Utiliser la fonction centralisée d'arrêt des pénalités
+    punishment_emergency_stop
+    ui_success "✓ Toutes les pénalités arrêtées"
+    stopped_count=$((stopped_count + 1))
 
-    # 3. Restaurer le wallpaper
-    if admin_restore_wallpaper; then
-      ui_success "✓ Wallpaper restauré"
-      stopped_count=$((stopped_count + 1))
-    fi
-
-    # 4. Restaurer le réseau
-    if admin_restore_network; then
-      ui_success "✓ Réseau restauré"
-      stopped_count=$((stopped_count + 1))
-    fi
-
-    # 5. Débloquer les sites
-    if admin_restore_websites; then
-      ui_success "✓ Sites web débloqués"
-      stopped_count=$((stopped_count + 1))
-    fi
-
-    # 6. Nettoyer les fichiers temporaires
+    # 3. Nettoyer les fichiers temporaires
     if admin_cleanup_temp_files; then
       ui_success "✓ Fichiers temporaires nettoyés"
       stopped_count=$((stopped_count + 1))
@@ -222,134 +199,6 @@ admin_stop_punishment_processes() {
   $stopped
 }
 
-admin_restore_mouse_all() {
-  local restored=false
-  
-  # Hyprland
-  if command -v hyprctl &>/dev/null && [[ -f "$CONFIG_DIR/mouse_hyprland_backup.conf" ]]; then
-    source "$CONFIG_DIR/mouse_hyprland_backup.conf"
-    hyprctl keyword input:sensitivity "${sensitivity:-0}"
-    rm -f "$CONFIG_DIR/mouse_hyprland_backup.conf"
-    restored=true
-  fi
-  
-  # GNOME
-  if [[ -f "$CONFIG_DIR/mouse_gnome_backup.conf" ]]; then
-    source "$CONFIG_DIR/mouse_gnome_backup.conf"
-    gsettings set org.gnome.desktop.peripherals.mouse speed "${speed//\'/}" 2>/dev/null || true
-    gsettings set org.gnome.desktop.peripherals.mouse accel-profile "${accel_profile//\'/}" 2>/dev/null || true
-    rm -f "$CONFIG_DIR/mouse_gnome_backup.conf"
-    restored=true
-  fi
-  
-  # KDE
-  if [[ -f "$CONFIG_DIR/mouse_kde_backup.conf" ]]; then
-    source "$CONFIG_DIR/mouse_kde_backup.conf"
-    kwriteconfig5 --file kcminputrc --group Mouse --key Acceleration "$acceleration" 2>/dev/null || true
-    kwriteconfig5 --file kcminputrc --group Mouse --key Threshold "$threshold" 2>/dev/null || true
-    qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
-    rm -f "$CONFIG_DIR/mouse_kde_backup.conf"
-    restored=true
-  fi
-  
-  # X11
-  if command -v xinput &>/dev/null && [[ -f "$CONFIG_DIR/mouse_devices.backup" ]]; then
-    local mouse_ids
-    mouse_ids=$(xinput list | grep -i mouse | grep -o 'id=[0-9]*' | cut -d= -f2)
-    for id in $mouse_ids; do
-      xinput set-prop "$id" "libinput Accel Speed" 0 2>/dev/null || true
-    done
-    rm -f "$CONFIG_DIR"/mouse_*.backup
-    restored=true
-  fi
-  
-  # Sway
-  if command -v swaymsg &>/dev/null && [[ -f "$CONFIG_DIR/mouse_sway_backup.conf" ]]; then
-    swaymsg input type:pointer accel_profile adaptive 2>/dev/null || true
-    swaymsg input type:pointer pointer_accel 0 2>/dev/null || true
-    rm -f "$CONFIG_DIR/mouse_sway_backup.conf"
-    restored=true
-  fi
-  
-  # Nettoyer fichier de simulation
-  if [[ -f "$CONFIG_DIR/mouse_reduction_reminder.txt" ]]; then
-    rm -f "$CONFIG_DIR/mouse_reduction_reminder.txt"
-    restored=true
-  fi
-  
-  $restored
-}
-
-admin_restore_wallpaper() {
-  local restored=false
-  
-  # Arrêter swaybg si en cours
-  pkill swaybg 2>/dev/null && restored=true
-  
-  # Restaurer selon backup
-  if [[ -f "$CONFIG_DIR/wallpaper_backup.info" ]]; then
-    local original_wallpaper
-    original_wallpaper=$(cat "$CONFIG_DIR/wallpaper_backup.info")
-
-    if command -v gsettings &>/dev/null; then
-      gsettings set org.gnome.desktop.background picture-uri "$original_wallpaper" 2>/dev/null || true
-      restored=true
-    elif command -v xfconf-query &>/dev/null; then
-      xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$original_wallpaper" 2>/dev/null || true
-      restored=true
-    elif command -v kwriteconfig5 &>/dev/null; then
-      kwriteconfig5 --file kdesktoprc --group Desktop0 --key Wallpaper "$original_wallpaper" 2>/dev/null || true
-      restored=true
-    fi
-
-    rm -f "$CONFIG_DIR/wallpaper_backup.info"
-  fi
-  
-  # Supprimer wallpaper de honte
-  rm -f "$CONFIG_DIR/shame_wallpaper.png" "$CONFIG_DIR/shame_wallpaper.png.txt"
-  
-  $restored
-}
-
-admin_restore_network() {
-  local restored=false
-  
-  # Vérifier si NetworkManager est arrêté
-  if ! systemctl is-active --quiet NetworkManager; then
-    if sudo -n systemctl start NetworkManager 2>/dev/null; then
-      restored=true
-    fi
-  fi
-  
-  # Nettoyer fichiers de restriction
-  if [[ -f "$CONFIG_DIR/network_restricted.txt" ]]; then
-    rm -f "$CONFIG_DIR/network_restricted.txt"
-    restored=true
-  fi
-  
-  if [[ -f "$CONFIG_DIR/restore_network.sh" ]]; then
-    rm -f "$CONFIG_DIR/restore_network.sh"
-    restored=true
-  fi
-  
-  $restored
-}
-
-admin_restore_websites() {
-  local restored=false
-  
-  # Restaurer /etc/hosts
-  if [[ -f "$CONFIG_DIR/blocked_hosts" ]] && sudo -n true 2>/dev/null; then
-    sudo sed -i '/# Learning Challenge - Punishment Block/,/^$/d' /etc/hosts 2>/dev/null && restored=true
-    rm -f "$CONFIG_DIR/blocked_hosts"
-  elif [[ -f "$CONFIG_DIR/blocked_hosts" ]]; then
-    rm -f "$CONFIG_DIR/blocked_hosts"
-    restored=true
-  fi
-  
-  $restored
-}
-
 admin_cleanup_temp_files() {
   local cleaned=false
   
@@ -371,118 +220,76 @@ admin_cleanup_temp_files() {
   $cleaned
 }
 
-# ============================================================================
-# Fonctions de diagnostic
-# ============================================================================
+admin_cleanup_all() {
+  ui_header "🗑️ Nettoyage Complet"
+  
+  ui_warning "Cette action va supprimer :"
+  echo "  📁 Fichiers temporaires"
+  echo "  🗃️ Logs de notifications"  
+  echo "  🔄 Processus orphelins"
+  echo "  ⚠️ Fichiers de backup système"
+  echo
+  ui_info "Les statistiques et configuration seront PRÉSERVÉES"
+  echo
 
-admin_count_active_penalties() {
-  local count=0
-  
-  [[ -f "$CONFIG_DIR/network_restricted.txt" ]] && count=$((count + 1))
-  [[ -f "$CONFIG_DIR/wallpaper_backup.info" ]] && count=$((count + 1))
-  [[ -f "$CONFIG_DIR/mouse_reduction_reminder.txt" ]] && count=$((count + 1))
-  [[ -f "$CONFIG_DIR/blocked_hosts" ]] && count=$((count + 1))
-  [[ -f "$CONFIG_DIR/mouse_gnome_backup.conf" ]] && count=$((count + 1))
-  [[ -f "$CONFIG_DIR/mouse_kde_backup.conf" ]] && count=$((count + 1))
-  [[ -f "$CONFIG_DIR/mouse_hyprland_backup.conf" ]] && count=$((count + 1))
-  
-  pgrep -f "punishment.*notification_spam" &>/dev/null && count=$((count + 1))
-  
-  echo "$count"
+  if ui_confirm "Effectuer le nettoyage complet ?"; then
+    local cleaned_count=0
+
+    # Nettoyer fichiers temporaires
+    if admin_cleanup_temp_files; then
+      ui_success "✓ Fichiers temporaires supprimés"
+      cleaned_count=$((cleaned_count + 1))
+    fi
+
+    # Nettoyer processus orphelins
+    if pkill -f "learning.*timer" 2>/dev/null; then
+      ui_success "✓ Processus timer nettoyés"
+      cleaned_count=$((cleaned_count + 1))
+    fi
+
+    # Nettoyer logs
+    if [[ -f "$CONFIG_DIR/notifications.log" ]]; then
+      rm -f "$CONFIG_DIR/notifications.log"
+      ui_success "✓ Logs de notifications supprimés"
+      cleaned_count=$((cleaned_count + 1))
+    fi
+
+    # Nettoyer backups système
+    local backup_files=(
+      "$CONFIG_DIR"/mouse_*_backup.conf
+      "$CONFIG_DIR/wallpaper_backup.info"
+      "$CONFIG_DIR/restore_network.sh"
+    )
+    
+    local backup_cleaned=false
+    for pattern in "${backup_files[@]}"; do
+      if ls $pattern 2>/dev/null; then
+        rm -f $pattern
+        backup_cleaned=true
+      fi
+    done
+    
+    if $backup_cleaned; then
+      ui_success "✓ Fichiers de backup supprimés"
+      cleaned_count=$((cleaned_count + 1))
+    fi
+
+    echo
+    ui_success "🎉 Nettoyage terminé - $cleaned_count catégories nettoyées"
+    admin_log "CLEANUP_ALL" "Nettoyage complet effectué - $cleaned_count actions"
+  else
+    ui_info "Nettoyage annulé"
+  fi
 }
+
+# ============================================================================
+# Fonctions utilitaires
+# ============================================================================
 
 admin_has_mission() {
   local mission_data
   mission_data=$(config_get_current_mission)
   [[ "$mission_data" != "null" ]] && [[ -n "$mission_data" ]]
-}
-
-admin_show_active_penalties() {
-  ui_header "📋 Pénalités Actives Détaillées"
-  
-  local found=false
-  
-  if [[ -f "$CONFIG_DIR/network_restricted.txt" ]]; then
-    echo "🌐 RESTRICTION RÉSEAU :"
-    cat "$CONFIG_DIR/network_restricted.txt" | head -5
-    echo ""; found=true
-  fi
-  
-  if [[ -f "$CONFIG_DIR/wallpaper_backup.info" ]]; then
-    echo "🖼️ WALLPAPER DE LA HONTE : Actif"
-    echo ""; found=true
-  fi
-  
-  if [[ -f "$CONFIG_DIR/mouse_reduction_reminder.txt" ]]; then
-    echo "🖱️ SOURIS (simulation) :"
-    cat "$CONFIG_DIR/mouse_reduction_reminder.txt" | head -5
-    echo ""; found=true
-  fi
-  
-  if [[ -f "$CONFIG_DIR/mouse_hyprland_backup.conf" ]]; then
-    echo "🖱️ SOURIS HYPRLAND : Sensibilité réduite"
-    echo ""; found=true
-  fi
-  
-  if [[ -f "$CONFIG_DIR/blocked_hosts" ]]; then
-    echo "🚫 SITES BLOQUÉS :"
-    wc -l "$CONFIG_DIR/blocked_hosts" | cut -d' ' -f1 | xargs echo "Sites bloqués :"
-    echo ""; found=true
-  fi
-  
-  if pgrep -f "punishment.*notification_spam" &>/dev/null; then
-    echo "📢 NOTIFICATIONS SPAM : Actives"
-    echo ""; found=true
-  fi
-  
-  if [[ "$found" == "false" ]]; then
-    ui_success "✅ Aucune pénalité active détectée"
-  fi
-}
-
-admin_full_diagnostic() {
-  ui_header "🔍 Diagnostic Complet"
-  
-  echo "=== ENVIRONNEMENT ==="
-  echo "OS: $(uname -a)"
-  echo "Desktop: ${XDG_CURRENT_DESKTOP:-'Inconnu'}"
-  echo "Session: ${XDG_SESSION_TYPE:-'Inconnu'}"
-  echo "Wayland: ${WAYLAND_DISPLAY:-'Non'}"
-  echo "Display: ${DISPLAY:-'Non'}"
-  echo ""
-  
-  echo "=== OUTILS DISPONIBLES ==="
-  local tools=("hyprctl" "gsettings" "xinput" "notify-send" "systemctl" "sudo")
-  for tool in "${tools[@]}"; do
-    if command -v "$tool" &>/dev/null; then
-      echo "✓ $tool"
-    else
-      echo "✗ $tool"
-    fi
-  done
-  echo ""
-  
-  echo "=== FICHIERS DE CONFIGURATION ==="
-  local files=("$CONFIG_FILE" "$STATS_FILE" "$MISSION_FILE")
-  for file in "${files[@]}"; do
-    if [[ -f "$file" ]]; then
-      echo "✓ $(basename "$file") ($(stat -c%s "$file") octets)"
-    else
-      echo "✗ $(basename "$file") (manquant)"
-    fi
-  done
-  echo ""
-  
-  echo "=== PROCESSUS ACTIFS ==="
-  pgrep -f "learning" | head -10 | while read pid; do
-    echo "PID $pid: $(ps -p $pid -o comm= 2>/dev/null || echo 'Process terminé')"
-  done
-  echo ""
-  
-  echo "=== UTILISATION DISQUE ==="
-  if [[ -d "$CONFIG_DIR" ]]; then
-    du -sh "$CONFIG_DIR" 2>/dev/null | cut -f1 | xargs echo "Configuration:"
-  fi
 }
 
 # ============================================================================
@@ -507,4 +314,7 @@ admin_show_log() {
   else
     ui_info "Aucun journal admin trouvé"
   fi
+  
+  echo
+  ui_wait
 }

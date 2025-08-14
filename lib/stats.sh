@@ -79,6 +79,11 @@ stats_display() {
   stats_display_by_difficulty
 
   echo
+  
+  # Afficher les badges obtenus
+  stats_show_badges
+
+  echo
   ui_wait
 }
 
@@ -129,7 +134,63 @@ stats_display_by_difficulty() {
 }
 
 # ============================================================================
-# Statistiques avancées
+# Système de badges simplifié
+# ============================================================================
+
+stats_show_badges() {
+  local completed current_streak best_streak
+  completed=$(config_get '.completed' "$STATS_FILE")
+  current_streak=$(config_get '.current_streak' "$STATS_FILE")
+  best_streak=$(config_get '.best_streak' "$STATS_FILE")
+
+  local achievements=()
+
+  # Badges basés sur le nombre de missions
+  if [[ $completed -ge 100 ]]; then
+    achievements+=("🏆 Centurion (100 missions)")
+  elif [[ $completed -ge 50 ]]; then
+    achievements+=("🥈 Vétéran (50 missions)")
+  elif [[ $completed -ge 10 ]]; then
+    achievements+=("🥉 Apprenti (10 missions)")
+  fi
+
+  # Badges basés sur les streaks
+  if [[ $best_streak -ge 30 ]]; then
+    achievements+=("🔥 Légende (30 jours consécutifs)")
+  elif [[ $best_streak -ge 14 ]]; then
+    achievements+=("⚡ Déterminé (14 jours consécutifs)")
+  elif [[ $best_streak -ge 7 ]]; then
+    achievements+=("💪 Constant (7 jours consécutifs)")
+  fi
+
+  # Badges par difficulté
+  local hard_completed
+  hard_completed=$(jq -r '.difficulty_stats.Hard.completed // 0' "$STATS_FILE")
+  if [[ $hard_completed -ge 10 ]]; then
+    achievements+=("💀 Maître Hard (10 missions Hard)")
+  fi
+
+  if [[ ${#achievements[@]} -gt 0 ]]; then
+    ui_info "🏆 Récompenses débloquées :"
+    for achievement in "${achievements[@]}"; do
+      echo "  $achievement"
+    done
+    echo
+  else
+    ui_info "🎯 Continuez pour débloquer vos premiers badges !"
+    echo "  🥉 Apprenti : 10 missions complétées"
+    echo "  💪 Constant : 7 jours consécutifs"
+    echo
+  fi
+
+  # Message motivationnel
+  local motivation
+  motivation=$(stats_get_motivation_message)
+  ui_info "💬 $motivation"
+}
+
+# ============================================================================
+# Fonctions utilitaires simplifiées
 # ============================================================================
 
 stats_get_success_rate() {
@@ -144,52 +205,29 @@ stats_get_success_rate() {
   fi
 }
 
-stats_get_activity_performance() {
-  local activity=$1
-  local completed failed
-  completed=$(jq -r --arg activity "$activity" '.activity_stats[$activity].completed // 0' "$STATS_FILE")
-  failed=$(jq -r --arg activity "$activity" '.activity_stats[$activity].failed // 0' "$STATS_FILE")
-  local total=$((completed + failed))
-
-  echo "completed:$completed"
-  echo "failed:$failed"
-  echo "total:$total"
-
-  if [[ $total -gt 0 ]]; then
-    local rate
-    rate=$(echo "scale=2; $completed * 100 / $total" | bc -l)
-    echo "rate:$rate"
-  else
-    echo "rate:0"
-  fi
-}
-
-stats_get_difficulty_performance() {
-  local difficulty=$1
-  local completed failed
-  completed=$(jq -r --arg difficulty "$difficulty" '.difficulty_stats[$difficulty].completed // 0' "$STATS_FILE")
-  failed=$(jq -r --arg difficulty "$difficulty" '.difficulty_stats[$difficulty].failed // 0' "$STATS_FILE")
-  local total=$((completed + failed))
-
-  echo "completed:$completed"
-  echo "failed:$failed"
-  echo "total:$total"
-
-  if [[ $total -gt 0 ]]; then
-    local rate
-    rate=$(echo "scale=2; $completed * 100 / $total" | bc -l)
-    echo "rate:$rate"
-  else
-    echo "rate:0"
-  fi
-}
-
 stats_get_current_streak() {
   config_get '.current_streak' "$STATS_FILE"
 }
 
 stats_get_best_streak() {
   config_get '.best_streak' "$STATS_FILE"
+}
+
+stats_get_motivation_message() {
+  local current_streak
+  current_streak=$(config_get '.current_streak' "$STATS_FILE")
+  local success_rate
+  success_rate=$(stats_get_success_rate)
+
+  if [[ $(echo "$success_rate >= 80" | bc -l) -eq 1 ]]; then
+    echo "🌟 Performance excellente ! Continuez comme ça !"
+  elif [[ $(echo "$success_rate >= 60" | bc -l) -eq 1 ]]; then
+    echo "👍 Bonne progression ! Vous êtes sur la bonne voie."
+  elif [[ $current_streak -ge 3 ]]; then
+    echo "🔥 Belle série en cours ! Ne cassez pas la chaîne !"
+  else
+    echo "💪 Chaque expert était un débutant. Continuez à apprendre !"
+  fi
 }
 
 # ============================================================================
@@ -230,84 +268,4 @@ stats_export() {
   local export_file="$HOME/learning_stats_$(date +%Y%m%d_%H%M%S).json"
   cp "$STATS_FILE" "$export_file"
   ui_success "Statistiques exportées vers: $export_file"
-}
-
-stats_get_weekly_summary() {
-  local last_week
-  last_week=$(date -d "7 days ago" +%s)
-
-  # Pour l'instant, on affiche juste les stats générales
-  # Plus tard on pourra ajouter un tracking par date
-  ui_info "Résumé de la semaine :"
-  local total completed failed
-  total=$(config_get '.total_missions' "$STATS_FILE")
-  completed=$(config_get '.completed' "$STATS_FILE")
-  failed=$(config_get '.failed' "$STATS_FILE")
-
-  echo "  Missions cette période: $total"
-  echo "  Succès: $completed"
-  echo "  Échecs: $failed"
-}
-
-# ============================================================================
-# Badges et récompenses (pour motivation)
-# ============================================================================
-
-stats_check_achievements() {
-  local completed current_streak best_streak
-  completed=$(config_get '.completed' "$STATS_FILE")
-  current_streak=$(config_get '.current_streak' "$STATS_FILE")
-  best_streak=$(config_get '.best_streak' "$STATS_FILE")
-
-  local achievements=()
-
-  # Badges basés sur le nombre de missions
-  if [[ $completed -ge 100 ]]; then
-    achievements+=("🏆 Centurion (100 missions)")
-  elif [[ $completed -ge 50 ]]; then
-    achievements+=("🥈 Vétéran (50 missions)")
-  elif [[ $completed -ge 10 ]]; then
-    achievements+=("🥉 Apprenti (10 missions)")
-  fi
-
-  # Badges basés sur les streaks
-  if [[ $best_streak -ge 30 ]]; then
-    achievements+=("🔥 Légende (30 jours consécutifs)")
-  elif [[ $best_streak -ge 14 ]]; then
-    achievements+=("⚡ Déterminé (14 jours consécutifs)")
-  elif [[ $best_streak -ge 7 ]]; then
-    achievements+=("💪 Constant (7 jours consécutifs)")
-  fi
-
-  # Badges par difficulté
-  local hard_completed
-  hard_completed=$(jq -r '.difficulty_stats.Hard.completed // 0' "$STATS_FILE")
-  if [[ $hard_completed -ge 10 ]]; then
-    achievements+=("💀 Maître Hard (10 missions Hard)")
-  fi
-
-  if [[ ${#achievements[@]} -gt 0 ]]; then
-    ui_info "🏆 Récompenses débloquées :"
-    for achievement in "${achievements[@]}"; do
-      echo "  $achievement"
-    done
-    echo
-  fi
-}
-
-stats_get_motivation_message() {
-  local current_streak
-  current_streak=$(config_get '.current_streak' "$STATS_FILE")
-  local success_rate
-  success_rate=$(stats_get_success_rate)
-
-  if [[ $(echo "$success_rate >= 80" | bc -l) -eq 1 ]]; then
-    echo "🌟 Performance excellente ! Continuez comme ça !"
-  elif [[ $(echo "$success_rate >= 60" | bc -l) -eq 1 ]]; then
-    echo "👍 Bonne progression ! Vous êtes sur la bonne voie."
-  elif [[ $current_streak -ge 3 ]]; then
-    echo "🔥 Belle série en cours ! Ne cassez pas la chaîne !"
-  else
-    echo "💪 Chaque expert était un débutant. Continuez à apprendre !"
-  fi
 }

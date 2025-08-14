@@ -4,14 +4,12 @@
 # UI Module - Interface utilisateur et affichage
 # ============================================================================
 
-# Couleurs
+# Couleurs essentielles (suppression des couleurs inutilisées)
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
 readonly BLUE='\033[0;34m'
-readonly PURPLE='\033[0;35m'
 readonly CYAN='\033[0;36m'
-readonly BOLD='\033[1m'
 readonly NC='\033[0m'
 
 # ============================================================================
@@ -25,7 +23,7 @@ ui_clear() {
 ui_header() {
   local title=${1:-"Learning Challenge Manager"}
   ui_clear
-  echo -e "${PURPLE}${BOLD}"
+  echo -e "${CYAN}"
   echo "╔══════════════════════════════════════════════════════════════╗"
   printf "║%*s║\n" 62 "$(printf "%*s" $(((62 + ${#title}) / 2)) "$title")"
   echo "║                    Professional Training System              ║"
@@ -58,7 +56,7 @@ ui_divider() {
 }
 
 # ============================================================================
-# Fonction ui_box améliorée pour gérer les séparateurs
+# Fonction ui_box optimisée
 # ============================================================================
 
 ui_box() {
@@ -85,6 +83,10 @@ ui_box() {
     "" \
     "${lines[@]}"
 }
+
+# ============================================================================
+# Boîtes spécialisées pour missions
+# ============================================================================
 
 ui_mission_box() {
   local activity=$1
@@ -164,6 +166,10 @@ ui_current_mission_with_theme() {
   echo
 }
 
+# ============================================================================
+# Boîtes spécialisées pour statistiques et pénalités
+# ============================================================================
+
 ui_stats_box() {
   local total=$1
   local completed=$2
@@ -204,15 +210,9 @@ ui_punishment_warning() {
     "⚡ Application dans 5 secondes..."
 }
 
-ui_joker_available() {
-  gum style \
-    --border normal \
-    --margin "1 0" \
-    --padding "1 1" \
-    --border-foreground "#FFA500" \
-    "🃏 JOKER QUOTIDIEN DISPONIBLE" \
-    "Changement de mission possible (1/jour)"
-}
+# ============================================================================
+# Fonctions d'interaction utilisateur
+# ============================================================================
 
 ui_countdown() {
   local seconds=$1

@@ -14,6 +14,7 @@ readonly TIMER_PID_FILE="$CONFIG_DIR/timer.pid"
 readonly DEFAULT_EASY_DURATION=7200    # 2h en secondes
 readonly DEFAULT_MEDIUM_DURATION=10800 # 3h en secondes
 readonly DEFAULT_HARD_DURATION=14400   # 4h en secondes
+readonly JOKERS_PER_DAY=3              # Constante simplifié
 
 # ============================================================================
 # Initialisation de la configuration
@@ -45,10 +46,6 @@ config_init_main() {
     "notifications": {
         "enabled": true,
         "sound": true
-    },
-    "mission_settings": {
-        "enforce_unique": true,
-        "auto_theme_generation": true
     }
 }
 EOF
@@ -102,13 +99,12 @@ config_cleanup_old_mission() {
 }
 
 # ============================================================================
-# Fonctions de lecture/écriture
+# Fonctions de lecture/écriture simplifiées
 # ============================================================================
 
 config_get() {
   local key=$1
   local file=${2:-"$CONFIG_FILE"}
-
   jq -r "$key // empty" "$file" 2>/dev/null || echo ""
 }
 
@@ -116,15 +112,12 @@ config_set() {
   local key=$1
   local value=$2
   local file=${3:-"$CONFIG_FILE"}
-
   local temp_file
   temp_file=$(mktemp)
 
   if [[ "$value" =~ ^[0-9]+$ ]] || [[ "$value" =~ ^(true|false)$ ]]; then
-    # Valeur numérique ou booléenne
     jq "$key = $value" "$file" >"$temp_file"
   else
-    # Valeur string
     jq --arg val "$value" "$key = \$val" "$file" >"$temp_file"
   fi
 
@@ -143,12 +136,8 @@ config_set_duration() {
 }
 
 # ============================================================================
-# Gestion du système de jokers (3 par jour)
+# Gestion du système de jokers simplifié
 # ============================================================================
-
-config_get_jokers_total() {
-  echo "3" # 3 jokers par jour
-}
 
 config_get_jokers_used() {
   local today
@@ -169,21 +158,15 @@ config_get_jokers_used() {
 }
 
 config_get_jokers_available() {
-  local total used
-  total=$(config_get_jokers_total)
+  local used
   used=$(config_get_jokers_used)
-  echo $((total - used))
+  echo $((JOKERS_PER_DAY - used))
 }
 
 config_is_joker_available() {
   local available
   available=$(config_get_jokers_available)
-
-  if [[ $available -gt 0 ]]; then
-    echo "true"
-  else
-    echo "false"
-  fi
+  [[ $available -gt 0 ]]
 }
 
 config_use_joker() {
@@ -191,13 +174,12 @@ config_use_joker() {
   today=$(date +%Y-%m-%d)
   used=$(config_get_jokers_used)
 
-  # Incrémenter le nombre de jokers utilisés
   config_set '.jokers_used_today' $((used + 1))
   config_set '.last_joker_date' "$today"
 }
 
 # ============================================================================
-# Gestion des missions avec support des thèmes
+# Gestion des missions
 # ============================================================================
 
 config_save_mission() {
@@ -217,13 +199,13 @@ config_save_mission() {
       --arg duration "$duration" \
       --arg theme "$theme" \
       '{
-                activity: $activity,
-                difficulty: $difficulty,
-                start_time: ($start_time | tonumber),
-                duration: ($duration | tonumber),
-                theme: $theme,
-                status: "active"
-            }')
+        activity: $activity,
+        difficulty: $difficulty,
+        start_time: ($start_time | tonumber),
+        duration: ($duration | tonumber),
+        theme: $theme,
+        status: "active"
+      }')
   else
     mission_data=$(jq -n \
       --arg activity "$activity" \
@@ -231,12 +213,12 @@ config_save_mission() {
       --arg start_time "$start_time" \
       --arg duration "$duration" \
       '{
-                activity: $activity,
-                difficulty: $difficulty,
-                start_time: ($start_time | tonumber),
-                duration: ($duration | tonumber),
-                status: "active"
-            }')
+        activity: $activity,
+        difficulty: $difficulty,
+        start_time: ($start_time | tonumber),
+        duration: ($duration | tonumber),
+        status: "active"
+      }')
   fi
 
   echo "$mission_data" >"$MISSION_FILE"
@@ -313,7 +295,7 @@ config_is_timer_running() {
 }
 
 # ============================================================================
-# Configuration des durées personnalisées
+# Configuration des durées simplifiée
 # ============================================================================
 
 config_modify_durations() {
@@ -340,13 +322,13 @@ config_modify_durations() {
 
   case "$choice" in
   "Modifier Easy")
-    config_modify_single_duration "easy" "$current_easy"
+    config_modify_duration "easy" "$current_easy"
     ;;
   "Modifier Medium")
-    config_modify_single_duration "medium" "$current_medium"
+    config_modify_duration "medium" "$current_medium"
     ;;
   "Modifier Hard")
-    config_modify_single_duration "hard" "$current_hard"
+    config_modify_duration "hard" "$current_hard"
     ;;
   "Rétablir par défaut")
     config_set_duration "easy" "$DEFAULT_EASY_DURATION"
@@ -357,7 +339,7 @@ config_modify_durations() {
   esac
 }
 
-config_modify_single_duration() {
+config_modify_duration() {
   local difficulty=$1
   local current_duration=$2
   local current_formatted
@@ -369,12 +351,16 @@ config_modify_single_duration() {
   hours=$(ui_input "Heures (0-23)" "$(echo "$current_duration / 3600" | bc)")
   minutes=$(ui_input "Minutes (0-59)" "$(echo "($current_duration % 3600) / 60" | bc)")
 
-  if [[ "$hours" =~ ^[0-9]+$ ]] && [[ "$minutes" =~ ^[0-9]+$ ]]; then
+  if [[ "$hours" =~ ^[0-9]+$ ]] && [[ "$minutes" =~ ^[0-9]+$ ]] && [[ $hours -le 23 ]] && [[ $minutes -le 59 ]]; then
     local new_duration=$((hours * 3600 + minutes * 60))
-    config_set_duration "$difficulty" "$new_duration"
-    ui_success "Durée mise à jour: $(format_time "$new_duration")"
+    if [[ $new_duration -gt 0 ]]; then
+      config_set_duration "$difficulty" "$new_duration"
+      ui_success "Durée mise à jour: $(format_time "$new_duration")"
+    else
+      ui_error "La durée doit être supérieure à 0"
+    fi
   else
-    ui_error "Valeurs invalides"
+    ui_error "Valeurs invalides (heures: 0-23, minutes: 0-59)"
   fi
 }
 

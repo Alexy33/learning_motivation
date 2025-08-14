@@ -26,9 +26,33 @@ punishment_apply_random() {
   # Générer une durée aléatoire
   local duration=$((RANDOM % (max_duration - min_duration + 1) + min_duration))
 
-  # Choisir un type de pénalité aléatoire
+  # Choisir un type de pénalité disponible selon l'environnement
+  local available_punishments=()
+
+  # Toujours disponibles
+  available_punishments+=("wallpaper_shame")
+  available_punishments+=("notification_spam")
+
+  # Selon les privilèges et outils
+  if sudo -n true 2>/dev/null; then
+    available_punishments+=("network_restriction")
+    available_punishments+=("website_block")
+  fi
+
+  # Verrouillage selon l'environnement
+  if command -v loginctl &>/dev/null || command -v swaylock &>/dev/null || 
+     command -v gnome-screensaver-command &>/dev/null; then
+    available_punishments+=("lock_screen")
+  fi
+
+  # Souris selon l'environnement
+  if punishment_can_modify_mouse; then
+    available_punishments+=("mouse_sensitivity")
+  fi
+
+  # Choisir un type de pénalité aléatoire parmi les disponibles
   local punishment_type
-  punishment_type=${PUNISHMENT_TYPES[$((RANDOM % ${#PUNISHMENT_TYPES[@]}))]}
+  punishment_type=${available_punishments[$((RANDOM % ${#available_punishments[@]}))]}
 
   punishment_apply "$punishment_type" "$duration"
 }
@@ -68,34 +92,8 @@ punishment_apply() {
 }
 
 # ============================================================================
-# Types de pénalités spécifiques
+# Détection de l'environnement
 # ============================================================================
-
-punishment_lock_screen() {
-  local duration=$1
-
-  ui_error "🔒 Écran verrouillé pour $duration minutes"
-
-  # Essayer différentes méthodes de verrouillage selon l'environnement
-  if command -v loginctl &>/dev/null; then
-    loginctl lock-session
-  elif command -v xscreensaver-command &>/dev/null; then
-    xscreensaver-command -lock
-  elif command -v gnome-screensaver-command &>/dev/null; then
-    gnome-screensaver-command -l
-  elif command -v swaylock &>/dev/null && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
-    swaylock
-  else
-    ui_warning "Impossible de verrouiller l'écran automatiquement"
-    ui_info "Veuillez verrouiller manuellement votre écran pour $duration minutes"
-  fi
-
-  # Programmer le déverrouillage (notification)
-  (
-    sleep $((duration * 60))
-    punishment_send_unlock_notification
-  ) &
-}
 
 punishment_detect_environment() {
   if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
@@ -142,13 +140,41 @@ punishment_can_modify_mouse() {
   return 1
 }
 
+# ============================================================================
+# Types de pénalités spécifiques
+# ============================================================================
+
+punishment_lock_screen() {
+  local duration=$1
+
+  ui_error "🔒 Écran verrouillé pour $duration minutes"
+
+  # Essayer différentes méthodes de verrouillage selon l'environnement
+  if command -v loginctl &>/dev/null; then
+    loginctl lock-session
+  elif command -v swaylock &>/dev/null && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+    swaylock
+  elif command -v gnome-screensaver-command &>/dev/null; then
+    gnome-screensaver-command -l
+  else
+    ui_warning "Impossible de verrouiller l'écran automatiquement"
+    ui_info "Veuillez verrouiller manuellement votre écran pour $duration minutes"
+  fi
+
+  # Programmer le déverrouillage (notification)
+  (
+    sleep $((duration * 60))
+    notify-send "🔓 Pénalité terminée" "La période de verrouillage est terminée. Vous pouvez déverrouiller votre écran."
+  ) &
+}
+
 punishment_restrict_network() {
   local duration=$1
 
   ui_error "🌐 Réseau restreint pour $duration minutes"
 
   # Vérifier si on peut utiliser NetworkManager
-  if systemctl is-active --quiet NetworkManager; then
+  if systemctl is-active --quiet NetworkManager && sudo -n true 2>/dev/null; then
     # Créer un script de restauration
     cat >"$CONFIG_DIR/restore_network.sh" <<'EOF'
 #!/bin/bash
@@ -169,9 +195,37 @@ EOF
 
     ui_info "Le réseau sera restauré automatiquement dans $duration minutes"
   else
-    ui_warning "NetworkManager non disponible, simulation de la restriction"
+    # Simulation de restriction
     punishment_simulate_network_restriction "$duration"
   fi
+}
+
+punishment_simulate_network_restriction() {
+  local duration=$1
+
+  # Créer un fichier de rappel visuel
+  cat >"$CONFIG_DIR/network_restricted.txt" <<EOF
+RÉSEAU SYMBOLIQUEMENT RESTREINT
+
+Durée: $duration minutes
+Début: $(date)
+Fin prévue: $(date -d "+${duration} minutes")
+
+Cette restriction est symbolique car les privilèges
+administrateur ne sont pas disponibles.
+
+Respectez cette restriction pour maintenir l'intégrité
+du système de motivation !
+EOF
+
+  ui_info "Fichier de restriction créé: $CONFIG_DIR/network_restricted.txt"
+
+  # Supprimer le fichier après la durée
+  (
+    sleep $((duration * 60))
+    rm -f "$CONFIG_DIR/network_restricted.txt"
+    notify-send "🌐 Restriction levée" "La restriction réseau symbolique est terminée."
+  ) &
 }
 
 punishment_block_websites() {
@@ -223,6 +277,13 @@ punishment_block_websites() {
   else
     ui_warning "Privilèges sudo requis pour bloquer les sites"
     ui_info "Blocage symbolique appliqué (fichier: $block_file)"
+    
+    # Nettoyage symbolique
+    (
+      sleep $((duration * 60))
+      rm -f "$block_file"
+      notify-send "🌐 Sites débloqués" "Le blocage symbolique des sites est terminé."
+    ) &
   fi
 }
 
@@ -250,26 +311,6 @@ punishment_change_wallpaper() {
   ) &
 
   ui_info "Le wallpaper sera restauré dans $duration minutes"
-}
-
-punishment_set_wallpaper_hyprland() {
-  local wallpaper_file=$1
-  
-  # Hyprland utilise hyprpaper ou swww généralement
-  if command -v swww &>/dev/null; then
-    swww img "$wallpaper_file" 2>/dev/null || true
-  elif command -v hyprpaper &>/dev/null; then
-    # Pour hyprpaper, on doit modifier la config temporairement
-    echo "preload = $wallpaper_file" > /tmp/hyprpaper_temp.conf
-    echo "wallpaper = ,$wallpaper_file" >> /tmp/hyprpaper_temp.conf
-    hyprpaper -c /tmp/hyprpaper_temp.conf &
-  else
-    # Fallback avec swaybg si disponible
-    if command -v swaybg &>/dev/null; then
-      pkill swaybg 2>/dev/null || true
-      swaybg -i "$wallpaper_file" &
-    fi
-  fi
 }
 
 punishment_notification_spam() {
@@ -330,6 +371,10 @@ punishment_reduce_mouse_sensitivity() {
   esac
 }
 
+# ============================================================================
+# Gestion souris par environnement
+# ============================================================================
+
 punishment_reduce_mouse_hyprland() {
   local duration=$1
 
@@ -356,56 +401,28 @@ punishment_reduce_mouse_hyprland() {
 punishment_restore_mouse_hyprland() {
   if [[ -f "$CONFIG_DIR/mouse_hyprland_backup.conf" ]]; then
     source "$CONFIG_DIR/mouse_hyprland_backup.conf"
-
-    # Restaurer la sensibilité
     hyprctl keyword input:sensitivity "$sensitivity"
-
     rm -f "$CONFIG_DIR/mouse_hyprland_backup.conf"
   else
-    # Restaurer la valeur par défaut
     hyprctl keyword input:sensitivity 0
   fi
 
   notify-send "🖱️ Souris restaurée" "Sensibilité normale rétablie (Hyprland)"
 }
 
-punishment_reduce_mouse_wayland() {
-  local duration=$1
-
-  ui_info "🌊 Environnement Wayland détecté"
-
-  # Pour GNOME sous Wayland
-  if command -v gsettings &>/dev/null && [[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]]; then
-    punishment_reduce_mouse_gnome_wayland "$duration"
-  # Pour KDE sous Wayland
-  elif command -v kwriteconfig5 &>/dev/null && [[ "$XDG_CURRENT_DESKTOP" == *"KDE"* ]]; then
-    punishment_reduce_mouse_kde_wayland "$duration"
-  # Pour Sway
-  elif command -v swaymsg &>/dev/null; then
-    punishment_reduce_mouse_sway "$duration"
-  else
-    # Fallback : simulation visuelle
-    punishment_simulate_mouse_reduction "$duration"
-  fi
-}
-
 punishment_reduce_mouse_gnome_wayland() {
   local duration=$1
 
   # Sauvegarder les paramètres actuels
-  local current_accel current_threshold
-  current_accel=$(gsettings get org.gnome.desktop.peripherals.mouse accel-profile 2>/dev/null || echo "'default'")
-  current_threshold=$(gsettings get org.gnome.desktop.peripherals.mouse speed 2>/dev/null || echo "0.0")
+  local current_speed
+  current_speed=$(gsettings get org.gnome.desktop.peripherals.mouse speed 2>/dev/null || echo "0.0")
 
-  # Sauvegarder dans un fichier
   cat >"$CONFIG_DIR/mouse_gnome_backup.conf" <<EOF
-accel_profile=$current_accel
-speed=$current_threshold
+speed=$current_speed
 EOF
 
   # Réduire la sensibilité
   gsettings set org.gnome.desktop.peripherals.mouse speed -0.7
-  gsettings set org.gnome.desktop.peripherals.mouse accel-profile 'flat'
 
   ui_success "✓ Sensibilité réduite via GNOME Settings"
 
@@ -416,24 +433,29 @@ EOF
   ) &
 }
 
+punishment_restore_mouse_gnome_wayland() {
+  if [[ -f "$CONFIG_DIR/mouse_gnome_backup.conf" ]]; then
+    source "$CONFIG_DIR/mouse_gnome_backup.conf"
+    gsettings set org.gnome.desktop.peripherals.mouse speed "${speed//\'/}" 2>/dev/null || true
+    rm -f "$CONFIG_DIR/mouse_gnome_backup.conf"
+  fi
+
+  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (GNOME/Wayland)."
+}
+
 punishment_reduce_mouse_kde_wayland() {
   local duration=$1
 
   # Sauvegarder les paramètres KDE
-  local current_accel current_threshold
+  local current_accel
   current_accel=$(kreadconfig5 --file kcminputrc --group Mouse --key Acceleration 2>/dev/null || echo "2.0")
-  current_threshold=$(kreadconfig5 --file kcminputrc --group Mouse --key Threshold 2>/dev/null || echo "2")
 
   cat >"$CONFIG_DIR/mouse_kde_backup.conf" <<EOF
 acceleration=$current_accel
-threshold=$current_threshold
 EOF
 
   # Réduire la sensibilité
   kwriteconfig5 --file kcminputrc --group Mouse --key Acceleration 0.5
-  kwriteconfig5 --file kcminputrc --group Mouse --key Threshold 1
-
-  # Recharger la configuration
   qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
 
   ui_success "✓ Sensibilité réduite via KDE Settings"
@@ -445,23 +467,49 @@ EOF
   ) &
 }
 
+punishment_restore_mouse_kde_wayland() {
+  if [[ -f "$CONFIG_DIR/mouse_kde_backup.conf" ]]; then
+    source "$CONFIG_DIR/mouse_kde_backup.conf"
+    kwriteconfig5 --file kcminputrc --group Mouse --key Acceleration "$acceleration"
+    qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
+    rm -f "$CONFIG_DIR/mouse_kde_backup.conf"
+  fi
+
+  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (KDE/Wayland)."
+}
+
+punishment_reduce_mouse_sway() {
+  local duration=$1
+
+  # Appliquer une sensibilité réduite temporaire
+  swaymsg input type:pointer accel_profile flat 2>/dev/null || true
+  swaymsg input type:pointer pointer_accel -0.7 2>/dev/null || true
+
+  ui_success "✓ Sensibilité réduite via Sway"
+
+  # Programmer la restauration
+  (
+    sleep $((duration * 60))
+    punishment_restore_mouse_sway
+  ) &
+}
+
+punishment_restore_mouse_sway() {
+  swaymsg input type:pointer accel_profile adaptive 2>/dev/null || true
+  swaymsg input type:pointer pointer_accel 0 2>/dev/null || true
+  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (Sway)."
+}
+
 punishment_reduce_mouse_x11() {
   local duration=$1
 
   ui_info "🖥️ Environnement X11 détecté"
 
   if command -v xinput &>/dev/null; then
-    # Sauvegarder les paramètres actuels
-    punishment_backup_mouse_settings
-
     local mouse_ids
     mouse_ids=$(xinput list | grep -i mouse | grep -o 'id=[0-9]*' | cut -d= -f2)
 
     for id in $mouse_ids; do
-      # Sauvegarder les paramètres actuels
-      xinput list-props "$id" >"$CONFIG_DIR/mouse_$id.backup" 2>/dev/null || true
-
-      # Réduire la sensibilité à 30%
       xinput set-prop "$id" "libinput Accel Speed" -0.7 2>/dev/null || true
     done
 
@@ -470,11 +518,24 @@ punishment_reduce_mouse_x11() {
     # Programmer la restauration
     (
       sleep $((duration * 60))
-      punishment_restore_mouse_settings
+      punishment_restore_mouse_x11
     ) &
   else
     punishment_simulate_mouse_reduction "$duration"
   fi
+}
+
+punishment_restore_mouse_x11() {
+  if command -v xinput &>/dev/null; then
+    local mouse_ids
+    mouse_ids=$(xinput list | grep -i mouse | grep -o 'id=[0-9]*' | cut -d= -f2)
+
+    for id in $mouse_ids; do
+      xinput set-prop "$id" "libinput Accel Speed" 0 2>/dev/null || true
+    done
+  fi
+
+  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (X11)."
 }
 
 punishment_simulate_mouse_reduction() {
@@ -520,170 +581,18 @@ EOF
   ) &
 }
 
-punishment_restore_mouse_gnome_wayland() {
-  if [[ -f "$CONFIG_DIR/mouse_gnome_backup.conf" ]]; then
-    source "$CONFIG_DIR/mouse_gnome_backup.conf"
-
-    # Restaurer les valeurs
-    gsettings set org.gnome.desktop.peripherals.mouse speed "${speed//\'/}" 2>/dev/null || true
-    gsettings set org.gnome.desktop.peripherals.mouse accel-profile "${accel_profile//\'/}" 2>/dev/null || true
-
-    rm -f "$CONFIG_DIR/mouse_gnome_backup.conf"
-  fi
-
-  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (GNOME/Wayland)."
-}
-
-punishment_restore_mouse_kde_wayland() {
-  if [[ -f "$CONFIG_DIR/mouse_kde_backup.conf" ]]; then
-    source "$CONFIG_DIR/mouse_kde_backup.conf"
-
-    # Restaurer les valeurs
-    kwriteconfig5 --file kcminputrc --group Mouse --key Acceleration "$acceleration"
-    kwriteconfig5 --file kcminputrc --group Mouse --key Threshold "$threshold"
-
-    # Recharger la configuration
-    qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
-
-    rm -f "$CONFIG_DIR/mouse_kde_backup.conf"
-  fi
-
-  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (KDE/Wayland)."
-}
-
-punishment_reduce_mouse_sway() {
-  local duration=$1
-
-  # Sauvegarder la config actuelle si elle existe
-  if [[ -f "$HOME/.config/sway/config" ]]; then
-    grep "input.*pointer" "$HOME/.config/sway/config" >"$CONFIG_DIR/mouse_sway_backup.conf" 2>/dev/null || true
-  fi
-
-  # Appliquer une sensibilité réduite temporaire
-  swaymsg input type:pointer accel_profile flat 2>/dev/null || true
-  swaymsg input type:pointer pointer_accel -0.7 2>/dev/null || true
-
-  ui_success "✓ Sensibilité réduite via Sway"
-
-  # Programmer la restauration
-  (
-    sleep $((duration * 60))
-    punishment_restore_mouse_sway
-  ) &
-}
-
-punishment_restore_mouse_sway() {
-  # Restaurer les paramètres par défaut de Sway
-  swaymsg input type:pointer accel_profile adaptive 2>/dev/null || true
-  swaymsg input type:pointer pointer_accel 0 2>/dev/null || true
-
-  rm -f "$CONFIG_DIR/mouse_sway_backup.conf"
-  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (Sway)."
-}
-
-punishment_restore_mouse_settings() {
-  if command -v xinput &>/dev/null && [[ -f "$CONFIG_DIR/mouse_devices.backup" ]]; then
-    # Restaurer les paramètres par défaut
-    local mouse_ids
-    mouse_ids=$(xinput list | grep -i mouse | grep -o 'id=[0-9]*' | cut -d= -f2)
-
-    for id in $mouse_ids; do
-      # Remettre la sensibilité par défaut
-      xinput set-prop "$id" "libinput Accel Speed" 0 2>/dev/null || true
-    done
-
-    rm -f "$CONFIG_DIR"/mouse_*.backup
-  fi
-
-  notify-send "🖱️ Souris restaurée" "La sensibilité normale a été rétablie (X11)."
-}
-
-punishment_debug_environment() {
-  ui_info "🔍 Détection de l'environnement graphique:"
-  echo "  WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-'non défini'}"
-  echo "  DISPLAY: ${DISPLAY:-'non défini'}"
-  echo "  XDG_CURRENT_DESKTOP: ${XDG_CURRENT_DESKTOP:-'non défini'}"
-  echo "  XDG_SESSION_TYPE: ${XDG_SESSION_TYPE:-'non défini'}"
-  echo ""
-
-  ui_info "🛠️ Outils disponibles:"
-  command -v gsettings >/dev/null && echo "  ✓ gsettings (GNOME)" || echo "  ✗ gsettings"
-  command -v kwriteconfig5 >/dev/null && echo "  ✓ kwriteconfig5 (KDE)" || echo "  ✗ kwriteconfig5"
-  command -v swaymsg >/dev/null && echo "  ✓ swaymsg (Sway)" || echo "  ✗ swaymsg"
-  command -v xinput >/dev/null && echo "  ✓ xinput (X11)" || echo "  ✗ xinput"
-}
-
 # ============================================================================
-# Fonctions utilitaires pour les pénalités
+# Fonctions utilitaires wallpaper
 # ============================================================================
-punishment_apply_random_safe() {
-  # Récupérer les paramètres de pénalité
-  local min_duration max_duration
-  min_duration=$(config_get '.punishment_settings.min_duration')
-  max_duration=$(config_get '.punishment_settings.max_duration')
 
-  # Générer une durée aléatoire
-  local duration=$((RANDOM % (max_duration - min_duration + 1) + min_duration))
+punishment_backup_wallpaper() {
+  local backup_info="$CONFIG_DIR/wallpaper_backup.info"
 
-  # Types de pénalités disponibles selon l'environnement
-  local available_punishments=()
-
-  # Toujours disponibles
-  available_punishments+=("wallpaper_shame")
-  available_punishments+=("notification_spam")
-
-  # Selon les privilèges et outils
-  if sudo -n true 2>/dev/null; then
-    available_punishments+=("network_restriction")
-    available_punishments+=("website_block")
+  if command -v gsettings &>/dev/null; then
+    gsettings get org.gnome.desktop.background picture-uri >"$backup_info" 2>/dev/null || true
+  elif command -v xfconf-query &>/dev/null; then
+    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image >"$backup_info" 2>/dev/null || true
   fi
-
-  # Verrouillage selon l'environnement
-  if command -v loginctl &>/dev/null || command -v xscreensaver-command &>/dev/null ||
-    command -v gnome-screensaver-command &>/dev/null || command -v swaylock &>/dev/null; then
-    available_punishments+=("lock_screen")
-  fi
-
-  # Souris seulement si supporté
-  if [[ -n "${WAYLAND_DISPLAY:-}" ]] && command -v gsettings &>/dev/null; then
-    available_punishments+=("mouse_sensitivity")
-  elif [[ -n "${DISPLAY:-}" ]] && command -v xinput &>/dev/null; then
-    available_punishments+=("mouse_sensitivity")
-  fi
-
-  # Choisir un type de pénalité aléatoire parmi les disponibles
-  local punishment_type
-  punishment_type=${available_punishments[$((RANDOM % ${#available_punishments[@]}))]}
-
-  punishment_apply "$punishment_type" "$duration"
-}
-
-punishment_simulate_network_restriction() {
-  local duration=$1
-
-  # Créer un fichier de rappel visuel
-  cat >"$CONFIG_DIR/network_restricted.txt" <<EOF
-RÉSEAU SYMBOLIQUEMENT RESTREINT
-
-Durée: $duration minutes
-Début: $(date)
-Fin prévue: $(date -d "+${duration} minutes")
-
-Cette restriction est symbolique car les privilèges
-administrateur ne sont pas disponibles.
-
-Respectez cette restriction pour maintenir l'intégrité
-du système de motivation !
-EOF
-
-  ui_info "Fichier de restriction créé: $CONFIG_DIR/network_restricted.txt"
-
-  # Supprimer le fichier après la durée
-  (
-    sleep $((duration * 60))
-    rm -f "$CONFIG_DIR/network_restricted.txt"
-    notify-send "🌐 Restriction levée" "La restriction réseau symbolique est terminée."
-  ) &
 }
 
 punishment_create_shame_wallpaper() {
@@ -706,28 +615,15 @@ punishment_create_shame_wallpaper() {
   else
     # Créer un fichier texte simple si convert n'est pas disponible
     cat >"${output_file}.txt" <<EOF
-═══════════════════════════════════════
+╔══════════════════════════════════════════════════════════════╗
             MISSION ÉCHOUÉE
-═══════════════════════════════════════
+╚══════════════════════════════════════════════════════════════╝
 
 Il est temps de se remettre au travail !
 
 Date: $(date '+%H:%M - %d/%m/%Y')
-═══════════════════════════════════════
+╚══════════════════════════════════════════════════════════════╝
 EOF
-  fi
-}
-
-punishment_backup_wallpaper() {
-  # Essayer de sauvegarder le wallpaper actuel selon l'environnement
-  local backup_info="$CONFIG_DIR/wallpaper_backup.info"
-
-  if command -v gsettings &>/dev/null; then
-    # GNOME
-    gsettings get org.gnome.desktop.background picture-uri >"$backup_info" 2>/dev/null || true
-  elif command -v xfconf-query &>/dev/null; then
-    # XFCE
-    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image >"$backup_info" 2>/dev/null || true
   fi
 }
 
@@ -738,17 +634,30 @@ punishment_set_wallpaper() {
   if command -v hyprctl &>/dev/null; then
     punishment_set_wallpaper_hyprland "$wallpaper_file"
   elif command -v gsettings &>/dev/null; then
-    # GNOME
     gsettings set org.gnome.desktop.background picture-uri "file://$wallpaper_file" 2>/dev/null || true
   elif command -v xfconf-query &>/dev/null; then
-    # XFCE
     xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$wallpaper_file" 2>/dev/null || true
   elif command -v kwriteconfig5 &>/dev/null; then
-    # KDE
     kwriteconfig5 --file kdesktoprc --group Desktop0 --key Wallpaper "$wallpaper_file" 2>/dev/null || true
   elif command -v feh &>/dev/null; then
-    # Feh (environnements légers)
     feh --bg-scale "$wallpaper_file" 2>/dev/null || true
+  fi
+}
+
+punishment_set_wallpaper_hyprland() {
+  local wallpaper_file=$1
+  
+  if command -v swww &>/dev/null; then
+    swww img "$wallpaper_file" 2>/dev/null || true
+  elif command -v hyprpaper &>/dev/null; then
+    echo "preload = $wallpaper_file" > /tmp/hyprpaper_temp.conf
+    echo "wallpaper = ,$wallpaper_file" >> /tmp/hyprpaper_temp.conf
+    hyprpaper -c /tmp/hyprpaper_temp.conf &
+  else
+    if command -v swaybg &>/dev/null; then
+      pkill swaybg 2>/dev/null || true
+      swaybg -i "$wallpaper_file" &
+    fi
   fi
 }
 
@@ -768,30 +677,13 @@ punishment_restore_wallpaper() {
     rm -f "$backup_info"
   fi
 
+  # Arrêter swaybg si en cours
+  pkill swaybg 2>/dev/null || true
+
+  # Supprimer wallpaper de honte
+  rm -f "$CONFIG_DIR/shame_wallpaper.png" "$CONFIG_DIR/shame_wallpaper.png.txt"
+
   notify-send "🖼️ Wallpaper restauré" "Le fond d'écran original a été rétabli."
-}
-
-punishment_backup_mouse_settings() {
-  if command -v xinput &>/dev/null; then
-    xinput list >"$CONFIG_DIR/mouse_devices.backup"
-  fi
-}
-
-punishment_restore_mouse_settings() {
-  if command -v xinput &>/dev/null && [[ -f "$CONFIG_DIR/mouse_devices.backup" ]]; then
-    # Restaurer les paramètres par défaut
-    local mouse_ids
-    mouse_ids=$(xinput list | grep -i mouse | grep -o 'id=[0-9]*' | cut -d= -f2)
-
-    for id in $mouse_ids; do
-      # Remettre la sensibilité par défaut
-      xinput set-prop "$id" "libinput Accel Speed" 0 2>/dev/null || true
-    done
-
-    rm -f "$CONFIG_DIR"/mouse_*.backup
-  fi
-
-  notify-send "🖱️ Souris restaurée" "La sensibilité de la souris a été rétablie."
 }
 
 punishment_restore_websites() {
@@ -801,18 +693,27 @@ punishment_restore_websites() {
     # Supprimer les lignes ajoutées du fichier hosts
     sudo sed -i '/# Learning Challenge - Punishment Block/,/^$/d' /etc/hosts
     rm -f "$block_file"
-
     notify-send "🌐 Sites débloqués" "L'accès aux sites web a été restauré."
   fi
-}
-
-punishment_send_unlock_notification() {
-  notify-send "🔓 Pénalité terminée" "La période de verrouillage est terminée. Vous pouvez déverrouiller votre écran."
 }
 
 # ============================================================================
 # Gestion des pénalités actives
 # ============================================================================
+
+punishment_has_active_punishments() {
+  # Vérifier s'il y a des pénalités en cours
+  if [[ -f "$CONFIG_DIR/network_restricted.txt" ]] ||
+    [[ -f "$CONFIG_DIR/wallpaper_backup.info" ]] ||
+    [[ -f "$CONFIG_DIR/blocked_hosts" ]] ||
+    [[ -f "$CONFIG_DIR/mouse_reduction_reminder.txt" ]] ||
+    [[ -f "$CONFIG_DIR"/mouse_*_backup.conf ]] ||
+    pgrep -f "punishment.*notification_spam" &>/dev/null; then
+    return 0 # Il y a des pénalités
+  else
+    return 1 # Pas de pénalités
+  fi
+}
 
 punishment_list_active() {
   ui_info "Pénalités actives :"
@@ -830,6 +731,16 @@ punishment_list_active() {
     found_any=true
   fi
 
+  if [[ -f "$CONFIG_DIR/blocked_hosts" ]]; then
+    echo "  🚫 Sites web bloqués"
+    found_any=true
+  fi
+
+  if [[ -f "$CONFIG_DIR"/mouse_*_backup.conf ]] || [[ -f "$CONFIG_DIR/mouse_reduction_reminder.txt" ]]; then
+    echo "  🖱️ Sensibilité souris réduite"
+    found_any=true
+  fi
+
   if pgrep -f "punishment.*notification_spam" &>/dev/null; then
     echo "  📢 Spam de notifications actif"
     found_any=true
@@ -843,59 +754,29 @@ punishment_list_active() {
 punishment_emergency_stop() {
   ui_warning "🚨 ARRÊT D'URGENCE DES PÉNALITÉS"
 
-  if ui_confirm "Voulez-vous vraiment arrêter toutes les pénalités actives ?"; then
-    # Arrêter toutes les pénalités en cours
-    pkill -f "punishment" 2>/dev/null || true
+  # Arrêter tous les processus de pénalités
+  pkill -f "punishment" 2>/dev/null || true
 
-    # Restaurer les paramètres
-    punishment_restore_wallpaper 2>/dev/null || true
-    punishment_restore_mouse_settings 2>/dev/null || true
+  # Restaurer les paramètres
+  punishment_restore_wallpaper 2>/dev/null || true
+  
+  # Restaurer souris selon environnement
+  [[ -f "$CONFIG_DIR/mouse_hyprland_backup.conf" ]] && punishment_restore_mouse_hyprland
+  [[ -f "$CONFIG_DIR/mouse_gnome_backup.conf" ]] && punishment_restore_mouse_gnome_wayland
+  [[ -f "$CONFIG_DIR/mouse_kde_backup.conf" ]] && punishment_restore_mouse_kde_wayland
+  command -v xinput &>/dev/null && punishment_restore_mouse_x11
 
-    # Nettoyer les fichiers temporaires
-    rm -f "$CONFIG_DIR/network_restricted.txt"
-    rm -f "$CONFIG_DIR/blocked_hosts"
-    rm -f "$CONFIG_DIR/restore_network.sh"
+  # Nettoyer les fichiers temporaires
+  rm -f "$CONFIG_DIR/network_restricted.txt"
+  rm -f "$CONFIG_DIR/blocked_hosts"
+  rm -f "$CONFIG_DIR/restore_network.sh"
+  rm -f "$CONFIG_DIR/mouse_reduction_reminder.txt"
 
-    ui_success "Toutes les pénalités ont été annulées."
-  fi
-}
-
-punishment_get_active_list() {
-  local active_punishments=""
-  local found_any=false
-
-  # Vérifier les différents types de pénalités
-  if [[ -f "$CONFIG_DIR/network_restricted.txt" ]]; then
-    active_punishments+="🌐 Restriction réseau active|"
-    found_any=true
+  # Restaurer réseau si nécessaire
+  if sudo -n true 2>/dev/null; then
+    sudo systemctl start NetworkManager 2>/dev/null || true
+    sudo sed -i '/# Learning Challenge - Punishment Block/,/^$/d' /etc/hosts 2>/dev/null || true
   fi
 
-  if [[ -f "$CONFIG_DIR/wallpaper_backup.info" ]]; then
-    active_punishments+="🖼️ Wallpaper de la honte actif|"
-    found_any=true
-  fi
-
-  if pgrep -f "punishment.*notification_spam" &>/dev/null; then
-    active_punishments+="📢 Spam de notifications actif|"
-    found_any=true
-  fi
-
-  if [[ -f "$CONFIG_DIR/blocked_hosts" ]]; then
-    active_punishments+="🚫 Sites web bloqués|"
-    found_any=true
-  fi
-
-  if [[ -f "$CONFIG_DIR"/mouse_*.backup ]]; then
-    active_punishments+="🖱️ Sensibilité souris réduite|"
-    found_any=true
-  fi
-
-  if [[ ! $found_any ]]; then
-    active_punishments="Aucune pénalité active actuellement"
-  else
-    # Enlever le dernier |
-    active_punishments=${active_punishments%|}
-  fi
-
-  echo "$active_punishments"
+  ui_success "Toutes les pénalités ont été annulées."
 }

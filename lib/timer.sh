@@ -37,7 +37,7 @@ timer_timeout_handler() {
 
     # Notification de fin de temps
     timer_send_notification "⏰ TEMPS ÉCOULÉ !" \
-      "Mission '$activity' - Temps imparti terminé !\nValidez votre mission avec 'learning-check'" \
+      "Mission '$activity' - Temps imparti terminé !\nValidez votre mission avec 'Terminer la mission'" \
       "critical"
 
     # Son d'alerte si activé
@@ -153,12 +153,6 @@ timer_get_elapsed() {
   echo $((current_time - start_time))
 }
 
-timer_is_overtime() {
-  local remaining
-  remaining=$(timer_get_remaining)
-  [[ $remaining -eq 0 ]]
-}
-
 # ============================================================================
 # Notifications
 # ============================================================================
@@ -183,10 +177,8 @@ timer_send_notification() {
         "$message"
     fi
 
-    # Notification dans le terminal (si dans une session)
-    if [[ -n "${DISPLAY:-}" ]] || [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
-      echo -e "\n${YELLOW}🔔 $title${NC}: $message" >>"$CONFIG_DIR/notifications.log"
-    fi
+    # Log des notifications pour debug
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $title: $message" >>"$CONFIG_DIR/notifications.log"
   fi
 }
 
@@ -281,46 +273,8 @@ timer_display_status() {
 
   if [[ $remaining -le 0 ]]; then
     ui_warning "⚠️  Le temps imparti est écoulé !"
-    ui_info "Utilisez 'learning-check' pour valider votre mission."
+    ui_info "Utilisez 'Terminer la mission' pour valider votre mission."
   elif [[ $remaining -le 300 ]]; then
     ui_warning "⚠️  Plus que 5 minutes ! Dépêchez-vous !"
-  fi
-}
-
-# ============================================================================
-# Utilitaires de formatage
-# ============================================================================
-
-timer_format_duration() {
-  local seconds=$1
-  local hours=$((seconds / 3600))
-  local minutes=$(((seconds % 3600) / 60))
-  local secs=$((seconds % 60))
-
-  if [[ $hours -gt 0 ]]; then
-    printf "%dh%02dm%02ds" $hours $minutes $secs
-  elif [[ $minutes -gt 0 ]]; then
-    printf "%dm%02ds" $minutes $secs
-  else
-    printf "%ds" $secs
-  fi
-}
-
-timer_parse_duration() {
-  local input=$1
-
-  # Format: 2h30m, 90m, 45, etc.
-  if [[ "$input" =~ ^([0-9]+)h([0-9]+)m?$ ]]; then
-    local hours=${BASH_REMATCH[1]}
-    local minutes=${BASH_REMATCH[2]}
-    echo $((hours * 3600 + minutes * 60))
-  elif [[ "$input" =~ ^([0-9]+)m$ ]]; then
-    local minutes=${BASH_REMATCH[1]}
-    echo $((minutes * 60))
-  elif [[ "$input" =~ ^([0-9]+)$ ]]; then
-    # Assume minutes si pas d'unité
-    echo $(($1 * 60))
-  else
-    echo "0"
   fi
 }
