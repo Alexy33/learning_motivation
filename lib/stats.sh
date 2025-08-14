@@ -91,7 +91,7 @@ stats_display_by_activity() {
   ui_info "📊 Statistiques par activité :"
   echo
 
-  local activities=("Challenge TryHackMe" "Documentation CVE" "Analyse de malware" "CTF Practice" "Veille sécurité")
+  local activities=("Challenge TryHackMe" "Documentation CVE" "Développement Tools" "Reverse Engineering" "Investigation Digitale")
 
   for activity in "${activities[@]}"; do
     local completed failed
@@ -102,10 +102,10 @@ stats_display_by_activity() {
     if [[ $total -gt 0 ]]; then
       local rate
       rate=$(echo "scale=1; $completed * 100 / $total" | bc -l 2>/dev/null || echo "0")
-      printf "  %-20s: %2d complétées, %2d échouées (%s%%)\n" \
+      printf "  %-25s: %2d complétées, %2d échouées (%s%%)\n" \
         "$activity" "$completed" "$failed" "$rate"
     else
-      printf "  %-20s: Aucune mission effectuée\n" "$activity"
+      printf "  %-25s: Aucune mission effectuée\n" "$activity"
     fi
   done
 }
@@ -249,9 +249,9 @@ stats_reset() {
     "activity_stats": {
         "Challenge TryHackMe": {"completed": 0, "failed": 0},
         "Documentation CVE": {"completed": 0, "failed": 0},
-        "Analyse de malware": {"completed": 0, "failed": 0},
-        "CTF Practice": {"completed": 0, "failed": 0},
-        "Veille sécurité": {"completed": 0, "failed": 0}
+        "Développement Tools": {"completed": 0, "failed": 0},
+        "Reverse Engineering": {"completed": 0, "failed": 0},
+        "Investigation Digitale": {"completed": 0, "failed": 0}
     },
     "difficulty_stats": {
         "Easy": {"completed": 0, "failed": 0},

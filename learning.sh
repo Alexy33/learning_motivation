@@ -168,9 +168,9 @@ show_challenges_menu() {
     --cursor.foreground="#0099ff" \
     "🔥 Challenge TryHackMe" \
     "📚 Documentation CVE" \
-    "🦠 Analyse de malware" \
-    "🏴‍☠️ CTF Practice" \
-    "📰 Veille sécurité" \
+    "🔧 Développement Tools" \
+    "🔍 Reverse Engineering" \
+    "🕵️ Investigation Digitale" \
     "↩️ Retour au menu principal")
 
   case "$challenge_choice" in
@@ -180,14 +180,14 @@ show_challenges_menu() {
   *"Documentation CVE"*)
     mission_create "Documentation CVE"
     ;;
-  *"Analyse de malware"*)
-    mission_create "Analyse de malware"
+  *"Développement Tools"*)
+    mission_create "Développement Tools"
     ;;
-  *"CTF Practice"*)
-    mission_create "CTF Practice"
+  *"Reverse Engineering"*)
+    mission_create "Reverse Engineering"
     ;;
-  *"Veille sécurité"*)
-    mission_create "Veille sécurité"
+  *"Investigation Digitale"*)
+    mission_create "Investigation Digitale"
     ;;
   *"Retour"*)
     return

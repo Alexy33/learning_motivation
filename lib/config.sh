@@ -24,6 +24,7 @@ config_init() {
   mkdir -p "$CONFIG_DIR"
   config_init_main
   config_init_stats
+  config_migrate_stats
   config_cleanup_old_mission
 }
 
@@ -65,9 +66,9 @@ config_init_stats() {
     "activity_stats": {
         "Challenge TryHackMe": {"completed": 0, "failed": 0},
         "Documentation CVE": {"completed": 0, "failed": 0},
-        "Analyse de malware": {"completed": 0, "failed": 0},
-        "CTF Practice": {"completed": 0, "failed": 0},
-        "Veille sécurité": {"completed": 0, "failed": 0}
+        "Développement Tools": {"completed": 0, "failed": 0},
+        "Reverse Engineering": {"completed": 0, "failed": 0},
+        "Investigation Digitale": {"completed": 0, "failed": 0}
     },
     "difficulty_stats": {
         "Easy": {"completed": 0, "failed": 0},
@@ -373,4 +374,107 @@ format_time() {
   local hours=$((seconds / 3600))
   local minutes=$(((seconds % 3600) / 60))
   printf "%dh%02dm" $hours $minutes
+}
+
+config_migrate_stats() {
+  if [[ ! -f "$STATS_FILE" ]]; then
+    return 0 # Pas de fichier à migrer
+  fi
+
+  # Vérifier si migration nécessaire (présence anciennes activités)
+  local needs_migration=false
+  
+  if jq -e '.activity_stats["Analyse de malware"]' "$STATS_FILE" >/dev/null 2>&1; then
+    needs_migration=true
+  fi
+  
+  if jq -e '.activity_stats["CTF Practice"]' "$STATS_FILE" >/dev/null 2>&1; then
+    needs_migration=true
+  fi
+  
+  if jq -e '.activity_stats["Veille sécurité"]' "$STATS_FILE" >/dev/null 2>&1; then
+    needs_migration=true
+  fi
+
+  if [[ "$needs_migration" == "true" ]]; then
+    ui_info "🔄 Migration des statistiques vers le nouveau système..."
+    
+    # Sauvegarder l'ancien fichier
+    cp "$STATS_FILE" "$STATS_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+    
+    # Récupérer les stats globales
+    local total completed failed current_streak best_streak last_date
+    total=$(jq -r '.total_missions // 0' "$STATS_FILE")
+    completed=$(jq -r '.completed // 0' "$STATS_FILE")
+    failed=$(jq -r '.failed // 0' "$STATS_FILE")
+    current_streak=$(jq -r '.current_streak // 0' "$STATS_FILE")
+    best_streak=$(jq -r '.best_streak // 0' "$STATS_FILE")
+    last_date=$(jq -r '.last_mission_date // ""' "$STATS_FILE")
+    
+    # Récupérer les stats par difficulté (à préserver)
+    local easy_completed easy_failed medium_completed medium_failed hard_completed hard_failed
+    easy_completed=$(jq -r '.difficulty_stats.Easy.completed // 0' "$STATS_FILE")
+    easy_failed=$(jq -r '.difficulty_stats.Easy.failed // 0' "$STATS_FILE")
+    medium_completed=$(jq -r '.difficulty_stats.Medium.completed // 0' "$STATS_FILE")
+    medium_failed=$(jq -r '.difficulty_stats.Medium.failed // 0' "$STATS_FILE")
+    hard_completed=$(jq -r '.difficulty_stats.Hard.completed // 0' "$STATS_FILE")
+    hard_failed=$(jq -r '.difficulty_stats.Hard.failed // 0' "$STATS_FILE")
+    
+    # Récupérer les stats des activités conservées
+    local tryhackme_completed tryhackme_failed cve_completed cve_failed
+    tryhackme_completed=$(jq -r '.activity_stats["Challenge TryHackMe"].completed // 0' "$STATS_FILE")
+    tryhackme_failed=$(jq -r '.activity_stats["Challenge TryHackMe"].failed // 0' "$STATS_FILE")
+    cve_completed=$(jq -r '.activity_stats["Documentation CVE"].completed // 0' "$STATS_FILE")
+    cve_failed=$(jq -r '.activity_stats["Documentation CVE"].failed // 0' "$STATS_FILE")
+    
+    # Migrer les anciennes activités vers les nouvelles
+    local malware_completed malware_failed ctf_completed ctf_failed veille_completed veille_failed
+    malware_completed=$(jq -r '.activity_stats["Analyse de malware"].completed // 0' "$STATS_FILE")
+    malware_failed=$(jq -r '.activity_stats["Analyse de malware"].failed // 0' "$STATS_FILE")
+    ctf_completed=$(jq -r '.activity_stats["CTF Practice"].completed // 0' "$STATS_FILE")
+    ctf_failed=$(jq -r '.activity_stats["CTF Practice"].failed // 0' "$STATS_FILE")
+    veille_completed=$(jq -r '.activity_stats["Veille sécurité"].completed // 0' "$STATS_FILE")
+    veille_failed=$(jq -r '.activity_stats["Veille sécurité"].failed // 0' "$STATS_FILE")
+    
+    # Créer le nouveau fichier stats avec migration intelligente
+    local temp_file
+    temp_file=$(mktemp)
+    
+    cat >"$temp_file" <<EOF
+{
+    "total_missions": $total,
+    "completed": $completed,
+    "failed": $failed,
+    "current_streak": $current_streak,
+    "best_streak": $best_streak,
+    "last_mission_date": "$last_date",
+    "activity_stats": {
+        "Challenge TryHackMe": {
+            "completed": $((tryhackme_completed + ctf_completed)),
+            "failed": $((tryhackme_failed + ctf_failed))
+        },
+        "Documentation CVE": {
+            "completed": $((cve_completed + veille_completed)),
+            "failed": $((cve_failed + veille_failed))
+        },
+        "Développement Tools": {"completed": 0, "failed": 0},
+        "Reverse Engineering": {
+            "completed": $malware_completed,
+            "failed": $malware_failed
+        },
+        "Investigation Digitale": {"completed": 0, "failed": 0}
+    },
+    "difficulty_stats": {
+        "Easy": {"completed": $easy_completed, "failed": $easy_failed},
+        "Medium": {"completed": $medium_completed, "failed": $medium_failed},
+        "Hard": {"completed": $hard_completed, "failed": $hard_failed}
+    }
+}
+EOF
+
+    mv "$temp_file" "$STATS_FILE"
+    
+    ui_success "✅ Migration terminée - anciennes stats préservées et réorganisées"
+    ui_info "📁 Sauvegarde créée: $(basename "$STATS_FILE.backup."*)"
+  fi
 }

@@ -1,86 +1,260 @@
 #!/bin/bash
 
 # ============================================================================
-# Mission Module - Gestion des missions et de leur cycle de vie
+# Mission Module - Gestion des missions avec thèmes refactorisés
 # ============================================================================
 
 readonly DIFFICULTIES=("Easy" "Medium" "Hard")
 
-# Thèmes par activité et difficulté (suppression des thèmes TryHackMe)
+# ============================================================================
+# NOUVEAUX THÈMES REFACTORISÉS - Plus précis et concentrés
+# ============================================================================
+
+# =========================
+# 📚 DOCUMENTATION CVE
+# =========================
 declare -A CVE_THEMES_EASY=(
-  ["1"]="Analyser 1 CVE récente (score CVSS < 7)"
-  ["2"]="Documenter une vulnérabilité web basique"
-  ["3"]="Rechercher des CVE dans un logiciel spécifique"
+  ["1"]="Documenter CVE-2024-4577 (RCE PHP-CGI)"
+  ["2"]="Analyser CVE-2024-3094 (Backdoor XZ Utils)"
+  ["3"]="Étudier CVE-2024-6387 (RegreSSHion OpenSSH)"
+  ["4"]="Documenter CVE-2024-4323 (RCE Cacti)"
+  ["5"]="Analyser CVE-2024-5535 (LFI OpenVPN)"
+  ["6"]="Étudier CVE-2024-27348 (RCE Apache HugeGraph)"
+  ["7"]="Documenter CVE-2024-6778 (SQLi WordPress)"
+  ["8"]="Analyser CVE-2024-7029 (XXE Strapi CMS)"
+  ["9"]="Étudier CVE-2024-8796 (CSRF Joomla)"
+  ["10"]="Documenter CVE-2024-9143 (XSS Drupal)"
+  ["11"]="Analyser CVE-2024-6923 (Directory Traversal NextCloud)"
+  ["12"]="Étudier CVE-2024-8190 (Deserialization GitLab)"
 )
 
 declare -A CVE_THEMES_MEDIUM=(
-  ["1"]="Analyser 2-3 CVE critiques (score CVSS > 7)"
-  ["2"]="Créer un rapport détaillé d'une CVE avec POC"
-  ["3"]="Comparer l'évolution d'une famille de vulnérabilités"
+  ["1"]="Créer un POC pour CVE-2024-21887 (Ivanti Connect)"
+  ["2"]="Analyser la chaîne d'attaque CVE-2024-4040 (CrushFTP)"
+  ["3"]="Documenter l'exploitation CVE-2024-5910 (Palo Alto)"
+  ["4"]="Créer un script d'exploit pour CVE-2024-6670 (Atlassian)"
+  ["5"]="Analyser l'impact CVE-2024-7593 (Zimbra RCE)"
+  ["6"]="Documenter le bypass CVE-2024-8956 (SonicWall)"
+  ["7"]="Créer un POC CVE-2024-9680 (Mozilla Firefox)"
+  ["8"]="Analyser CVE-2024-43044 (Jenkins Pipeline)"
+  ["9"]="Documenter CVE-2024-8963 (VMware vCenter)"
+  ["10"]="Créer exploit CVE-2024-7348 (PostgreSQL RCE)"
+  ["11"]="Analyser CVE-2024-6387 avec métasploit"
+  ["12"]="Documenter CVE-2024-9014 (Fortinet FortiOS)"
+  ["13"]="Créer POC CVE-2024-8698 (Apache Solr)"
+  ["14"]="Analyser CVE-2024-7519 (Kubernetes escape)"
+  ["15"]="Documenter CVE-2024-8872 (Docker breakout)"
 )
 
 declare -A CVE_THEMES_HARD=(
-  ["1"]="Analyser 3-5 CVE avec chaîne d'exploitation"
-  ["2"]="Rédiger un guide de mitigation complet"
-  ["3"]="Analyser l'impact d'une CVE sur plusieurs systèmes"
+  ["1"]="Développer un exploit complet pour CVE-2024-4577"
+  ["2"]="Créer un framework d'exploitation CVE-2024-3094"
+  ["3"]="Analyser et reproduire la supply chain attack XZ"
+  ["4"]="Développer un payload custom pour CVE-2024-6387"
+  ["5"]="Créer un kit d'exploitation multi-OS CVE-2024-21887"
+  ["6"]="Analyser les techniques d'évasion CVE-2024-4040"
+  ["7"]="Développer un worm basé sur CVE-2024-5910"
+  ["8"]="Créer un rootkit exploitant CVE-2024-6670"
+  ["9"]="Analyser l'APT29 utilisant CVE-2024-7593"
+  ["10"]="Développer un exploit 0-click CVE-2024-8956"
+  ["11"]="Créer une backdoor persistante CVE-2024-9680"
+  ["12"]="Analyser le groupe Lazarus et CVE-2024-43044"
+  ["13"]="Développer un exploit de container escape"
+  ["14"]="Créer un framework d'attaque cloud native"
+  ["15"]="Analyser une campagne APT complète récente"
 )
 
-declare -A MALWARE_THEMES_EASY=(
-  ["1"]="Analyse statique basique d'un malware connu"
-  ["2"]="Identifier les IoC d'un échantillon simple"
-  ["3"]="Documenter le comportement d'un adware"
+# =========================
+# 🔧 DÉVELOPPEMENT TOOLS
+# =========================
+declare -A TOOLS_THEMES_EASY=(
+  ["1"]="Créer un script de scan de ports en Python"
+  ["2"]="Développer un générateur de wordlists personnalisé"
+  ["3"]="Coder un parser de logs Apache/Nginx"
+  ["4"]="Créer un outil de vérification SSL/TLS"
+  ["5"]="Développer un scanner de subdomain en Go"
+  ["6"]="Coder un analyseur de headers HTTP"
+  ["7"]="Créer un outil de détection de CMS"
+  ["8"]="Développer un générateur de payloads XSS"
+  ["9"]="Coder un scanner de vulnérabilités WordPress"
+  ["10"]="Créer un outil d'extraction de métadonnées"
+  ["11"]="Développer un parseur de certificats X.509"
+  ["12"]="Coder un scanner de services SMB"
+  ["13"]="Créer un outil de bruteforce SSH optimisé"
+  ["14"]="Développer un analyseur de trafic DNS"
+  ["15"]="Coder un détecteur de technologie web"
 )
 
-declare -A MALWARE_THEMES_MEDIUM=(
-  ["1"]="Reverse engineering d'un trojan"
-  ["2"]="Analyse dynamique avec sandbox"
-  ["3"]="Décrypter la communication C&C"
+declare -A TOOLS_THEMES_MEDIUM=(
+  ["1"]="Développer un fuzzer HTTP intelligent"
+  ["2"]="Créer un outil de pivoting réseau automatisé"
+  ["3"]="Coder un framework de post-exploitation"
+  ["4"]="Développer un scanner de vulnérabilités Docker"
+  ["5"]="Créer un outil d'analyse de firmware IoT"
+  ["6"]="Coder un détecteur de malware statique"
+  ["7"]="Développer un outil de OSINT automatisé"
+  ["8"]="Créer un scanner de configuration cloud"
+  ["9"]="Coder un analyseur de protocoles réseau"
+  ["10"]="Développer un outil de détection d'intrusion"
+  ["11"]="Créer un framework de social engineering"
+  ["12"]="Coder un outil d'analyse de blockchain"
+  ["13"]="Développer un scanner de vulnérabilités API"
+  ["14"]="Créer un outil de reverse engineering automatisé"
+  ["15"]="Coder un système de honeypot intelligent"
+  ["16"]="Développer un outil d'évasion d'antivirus"
+  ["17"]="Créer un analyseur de malware dynamique"
+  ["18"]="Coder un outil de privilege escalation"
 )
 
-declare -A MALWARE_THEMES_HARD=(
-  ["1"]="Analyse complète d'un APT sophistiqué"
-  ["2"]="Désobfuscation et unpacking avancé"
-  ["3"]="Développer des signatures de détection"
+declare -A TOOLS_THEMES_HARD=(
+  ["1"]="Développer un système d'exploitation dédié pentest"
+  ["2"]="Créer un framework d'exploitation multi-plateforme"
+  ["3"]="Coder un moteur de détection de 0-day"
+  ["4"]="Développer un système de C2 furtif"
+  ["5"]="Créer un outil d'analyse comportementale avancée"
+  ["6"]="Coder un framework de machine learning pour la sécurité"
+  ["7"]="Développer un système de threat hunting automatisé"
+  ["8"]="Créer un outil de cryptanalyse moderne"
+  ["9"]="Coder un système de détection d'APT"
+  ["10"]="Développer un framework de red team automation"
+  ["11"]="Créer un système d'intelligence artificielle défensive"
+  ["12"]="Coder un outil d'analyse de supply chain"
+  ["13"]="Développer un système de sandbox avancé"
+  ["14"]="Créer un framework de bug bounty automatisé"
+  ["15"]="Coder un système de corrélation de menaces"
+  ["16"]="Développer un outil d'analyse de protocoles propriétaires"
+  ["17"]="Créer un système de déception technology"
+  ["18"]="Coder un framework d'analyse de comportement utilisateur"
 )
 
-declare -A CTF_THEMES_EASY=(
-  ["1"]="Résoudre 3-5 challenges Web faciles"
-  ["2"]="Challenges de cryptographie basique"
-  ["3"]="Forensics sur des fichiers simples"
+# =========================
+# 🎯 REVERSE ENGINEERING
+# =========================
+declare -A REVERSE_THEMES_EASY=(
+  ["1"]="Analyser un crackme basique x86"
+  ["2"]="Reverse d'un algorithme de chiffrement simple"
+  ["3"]="Débugger un programme protégé par UPX"
+  ["4"]="Analyser un keylogger Windows simple"
+  ["5"]="Reverse d'une application Android basique"
+  ["6"]="Débugger un driver Windows simple"
+  ["7"]="Analyser un ransomware éducatif"
+  ["8"]="Reverse d'un protocole réseau custom"
+  ["9"]="Débugger un rootkit userland"
+  ["10"]="Analyser un loader de malware basique"
+  ["11"]="Reverse d'un firmware router simple"
+  ["12"]="Débugger une application .NET obfusquée"
+  ["13"]="Analyser un trojan bancaire simple"
+  ["14"]="Reverse d'un challenge de CTF classique"
+  ["15"]="Débugger une bibliothèque cryptographique"
 )
 
-declare -A CTF_THEMES_MEDIUM=(
-  ["1"]="Résoudre 2-3 challenges de reverse engineering"
-  ["2"]="Pwn de binaires avec protections basiques"
-  ["3"]="Stéganographie et forensics avancés"
+declare -A REVERSE_THEMES_MEDIUM=(
+  ["1"]="Analyser le malware Emotet récent"
+  ["2"]="Reverse du ransomware LockBit"
+  ["3"]="Débugger le rootkit Gootkit"
+  ["4"]="Analyser le trojan QakBot"
+  ["5"]="Reverse du loader Bumblebee"
+  ["6"]="Débugger le stealer RedLine"
+  ["7"]="Analyser le backdoor Cobalt Strike"
+  ["8"]="Reverse du malware IcedID"
+  ["9"]="Débugger le trojan TrickBot"
+  ["10"]="Analyser le dropper Dridex"
+  ["11"]="Reverse du ransomware BlackCat"
+  ["12"]="Débugger le malware Formbook"
+  ["13"]="Analyser le rootkit Zacinlo"
+  ["14"]="Reverse du banking trojan Zeus"
+  ["15"]="Débugger le malware Ursnif"
+  ["16"]="Analyser le backdoor PlugX"
+  ["17"]="Reverse du stealer AZORult"
+  ["18"]="Débugger le trojan Hancitor"
 )
 
-declare -A CTF_THEMES_HARD=(
-  ["1"]="Exploitation de vulnérabilités 0-day"
-  ["2"]="Reverse engineering de malware obfusqué"
-  ["3"]="Challenges de cryptanalyse avancée"
+declare -A REVERSE_THEMES_HARD=(
+  ["1"]="Analyser une APT sophistiquée (Lazarus/APT29)"
+  ["2"]="Reverse d'un implant nation-state"
+  ["3"]="Débugger un hypervisor rootkit"
+  ["4"]="Analyser un bootkit UEFI"
+  ["5"]="Reverse d'un malware polymorphe avancé"
+  ["6"]="Débugger un rootkit kernel mode avancé"
+  ["7"]="Analyser un malware utilisant l'IA"
+  ["8"]="Reverse d'un firmware compromis"
+  ["9"]="Débugger un malware multi-architecture"
+  ["10"]="Analyser une supply chain attack complexe"
+  ["11"]="Reverse d'un malware cloud-native"
+  ["12"]="Débugger un implant IoT sophistiqué"
+  ["13"]="Analyser un malware utilisant la blockchain"
+  ["14"]="Reverse d'un rootkit hyperviseur"
+  ["15"]="Débugger un malware quantique-resistant"
+  ["16"]="Analyser un APT utilisant l'OSINT"
+  ["17"]="Reverse d'un malware memory-only"
+  ["18"]="Débugger un living-off-the-land attack"
 )
 
-declare -A VEILLE_THEMES_EASY=(
-  ["1"]="Résumé des actualités cyber de la semaine"
-  ["2"]="Analyser 3 nouvelles techniques d'attaque"
-  ["3"]="Veille sur un secteur spécifique (santé, finance...)"
+# =========================
+# 🕵️ INVESTIGATION DIGITALE
+# =========================
+declare -A FORENSICS_THEMES_EASY=(
+  ["1"]="Analyser un dump mémoire Windows suspect"
+  ["2"]="Investiguer des logs de connexion SSH"
+  ["3"]="Examiner un disque dur compromis"
+  ["4"]="Analyser le trafic réseau d'une attaque"
+  ["5"]="Investiguer des artéfacts de navigateur"
+  ["6"]="Examiner des logs d'événements Windows"
+  ["7"]="Analyser une image Docker suspecte"
+  ["8"]="Investiguer des métadonnées de fichiers"
+  ["9"]="Examiner des traces de malware Android"
+  ["10"]="Analyser des logs de serveur web compromis"
+  ["11"]="Investiguer une timeline d'attaque"
+  ["12"]="Examiner des artéfacts de persistance"
+  ["13"]="Analyser des dumps de processus malveillants"
+  ["14"]="Investiguer des traces de lateral movement"
+  ["15"]="Examiner des logs de base de données"
 )
 
-declare -A VEILLE_THEMES_MEDIUM=(
-  ["1"]="Rapport détaillé sur une campagne APT récente"
-  ["2"]="Analyse des tendances cyber du mois"
-  ["3"]="Étude comparative d'outils de sécurité"
+declare -A FORENSICS_THEMES_MEDIUM=(
+  ["1"]="Reconstituer une attaque APT complète"
+  ["2"]="Analyser un incident de ransomware"
+  ["3"]="Investiguer une compromission cloud AWS"
+  ["4"]="Examiner une attaque sur infrastructure critique"
+  ["5"]="Analyser un vol de données massif"
+  ["6"]="Investiguer une compromission de domaine AD"
+  ["7"]="Examiner une attaque supply chain"
+  ["8"]="Analyser un incident sur environnement Kubernetes"
+  ["9"]="Investiguer une fraude financière cyber"
+  ["10"]="Examiner une attaque sur système SCADA"
+  ["11"]="Analyser un cas d'espionnage industriel"
+  ["12"]="Investiguer une compromission mobile enterprise"
+  ["13"]="Examiner une attaque sur blockchain"
+  ["14"]="Analyser un incident IoT critique"
+  ["15"]="Investiguer une manipulation d'IA/ML"
+  ["16"]="Examiner une attaque sur 5G/Edge computing"
+  ["17"]="Analyser un incident de deepfake malveillant"
+  ["18"]="Investiguer une compromission de satellite"
 )
 
-declare -A VEILLE_THEMES_HARD=(
-  ["1"]="Analyse géopolitique des cybermenaces"
-  ["2"]="Prédictions et prospective cybersécurité"
-  ["3"]="Rapport stratégique pour décideurs"
+declare -A FORENSICS_THEMES_HARD=(
+  ["1"]="Analyser l'attribution d'une cyberattaque nation-state"
+  ["2"]="Investiguer une opération de désinformation complexe"
+  ["3"]="Examiner une attaque multi-vectorielle sophistiquée"
+  ["4"]="Analyser une compromission de réseau air-gapped"
+  ["5"]="Investiguer une manipulation d'élection"
+  ["6"]="Examiner une attaque sur infrastructure spatiale"
+  ["7"]="Analyser une compromission de véhicule autonome"
+  ["8"]="Investiguer une attaque sur réseau électrique"
+  ["9"]="Examiner une manipulation de marché financier"
+  ["10"]="Analyser une attaque sur système médical critique"
+  ["11"]="Investiguer une compromission d'usine intelligente"
+  ["12"]="Examiner une attaque sur intelligence artificielle"
+  ["13"]="Analyser une manipulation de données scientifiques"
+  ["14"]="Investiguer une attaque sur réseau quantique"
+  ["15"]="Examiner une compromission de smart city"
+  ["16"]="Analyser une attaque sur infrastructure 6G"
+  ["17"]="Investiguer une manipulation de réalité augmentée"
+  ["18"]="Examiner une compromission de brain-computer interface"
 )
 
 # ============================================================================
-# Vérification de mission unique
+# Vérification de mission unique (inchangé)
 # ============================================================================
 
 mission_check_unique() {
@@ -132,7 +306,7 @@ mission_check_unique_silent() {
 }
 
 # ============================================================================
-# Génération de missions par type
+# Génération de missions par type (REFACTORISÉ)
 # ============================================================================
 
 mission_create() {
@@ -150,14 +324,14 @@ mission_create() {
   "Documentation CVE")
     mission_create_themed "CVE" "Documentation CVE"
     ;;
-  "Analyse de malware")
-    mission_create_themed "MALWARE" "Analyse de malware"
+  "Développement Tools")
+    mission_create_themed "TOOLS" "Développement Tools"
     ;;
-  "CTF Practice")
-    mission_create_themed "CTF" "CTF Practice"
+  "Reverse Engineering")
+    mission_create_themed "REVERSE" "Reverse Engineering"
     ;;
-  "Veille sécurité")
-    mission_create_themed "VEILLE" "Veille sécurité"
+  "Investigation Digitale")
+    mission_create_themed "FORENSICS" "Investigation Digitale"
     ;;
   *)
     ui_error "Type d'activité non supporté: $activity"
@@ -309,7 +483,7 @@ mission_get_random_theme() {
 }
 
 # ============================================================================
-# Démarrage des missions
+# Démarrage des missions (inchangé)
 # ============================================================================
 
 mission_start() {
@@ -349,7 +523,7 @@ mission_start() {
 }
 
 # ============================================================================
-# Affichage des missions
+# Affichage des missions (inchangé)
 # ============================================================================
 
 mission_display_current() {
@@ -391,7 +565,7 @@ mission_display_current() {
 }
 
 # ============================================================================
-# Validation et complétion avec navigation améliorée
+# Validation et complétion (inchangé)
 # ============================================================================
 
 mission_validate() {
