@@ -420,7 +420,7 @@ emergency_force_cancel_mission() {
     difficulty=$(echo "$mission_data" | jq -r '.difficulty')
 
     ui_box "💀 CONSÉQUENCES DE L'ABANDON" \
-      "Mission: $activity ($difficulty)|Statut: Sera marquée comme ÉCHOUÉE|Pénalité: Application IMMÉDIATE d'une pénalité|Durée: 30-60 minutes selon le type||Types possibles:|🔒 Verrouillage d'écran|🌐 Restriction réseau|🚫 Blocage de sites|🖼️ Wallpaper motivationnel|📢 Notifications de rappel|🖱️ Réduction sensibilité souris||⚠️ CETTE ACTION EST IRRÉVERSIBLE" \
+      "Mission: $activity ($difficulty)|Statut: Sera marquée comme ÉCHOUÉE|Pénalité: Application IMMÉDIATE d'une pénalité|Durée: 30-60 minutes selon le type||Types possibles:|🌐 Restriction réseau complète|🚫 Blocage de sites distractifs|🖱️ Réduction sensibilité souris|🔊 Son strident avec volume progressif|🔄 Commandes terminal inversées|📺 Distorsion/rotation d'écran|⌨️ Délai de répétition clavier|💥 Injection de fausses erreurs|📢 Notifications de rappel||⚠️ CETTE ACTION EST IRRÉVERSIBLE" \
       "#FF0000"
 
     echo
@@ -527,7 +527,7 @@ emergency_system_status() {
   ui_header "État du système"
 
   echo
-  ui_info "🔍 Fichiers de configuration :"
+  ui_info "📁 Fichiers de configuration :"
   [[ -f "$CONFIG_DIR/config.json" ]] && echo "  ✓ config.json présent" || echo "  ❌ config.json manquant"
   [[ -f "$CONFIG_DIR/stats.json" ]] && echo "  ✓ stats.json présent" || echo "  ❌ stats.json manquant"
   [[ -f "$CONFIG_DIR/current_mission.json" ]] && echo "  ⚠️ Mission active détectée" || echo "  ✓ Aucune mission active"
@@ -558,7 +558,7 @@ emergency_system_status() {
 }
 
 # ============================================================================
-# Informations sur les pénalités
+# Informations sur les pénalités (fonction mise à jour)
 # ============================================================================
 
 show_punishment_info() {
@@ -569,7 +569,7 @@ show_punishment_info() {
   max_duration=$(config_get '.punishment_settings.max_duration')
 
   ui_box "⚠️ PÉNALITÉS EN CAS D'ÉCHEC" \
-    "En cas d'échec de mission, une pénalité aléatoire sera appliquée.|Durée: entre $min_duration et $max_duration minutes||Types de pénalités possibles:|🔒 Verrouillage d'écran temporaire|🌐 Restriction du réseau|🚫 Blocage de sites distractifs|🖼️ Changement de fond d'écran|📢 Notifications de rappel|🖱️ Réduction sensibilité souris||Ces pénalités sont motivationnelles et temporaires." \
+    "En cas d'échec de mission, une pénalité aléatoire sera appliquée.|Durée: entre $min_duration et $max_duration minutes||Types de pénalités possibles:|🌐 Restriction du réseau complet|🚫 Blocage de sites distractifs|🖱️ Réduction sensibilité souris|🔊 Son strident avec volume progressif|🔄 Commandes terminal inversées (ls/sl, etc.)|📺 Distorsion/rotation d'écran|⌨️ Délai de répétition clavier|💥 Injection de fausses erreurs système|📢 Notifications de rappel fréquentes||Ces pénalités sont motivationnelles et temporaires.|Utilisez vos jokers pour les éviter !" \
     "#FF6B6B"
 
   echo
@@ -595,7 +595,7 @@ show_settings_menu() {
     --cursor.foreground="#0099ff" \
     "🎯 Modifier les durées par difficulté" \
     "💀 Configuration des pénalités" \
-    "🔔 Paramètres de notifications" \
+    "📔 Paramètres de notifications" \
     "🔄 Réinitialiser les statistiques" \
     "📁 Voir dossier de configuration" \
     "📤 Exporter les statistiques" \

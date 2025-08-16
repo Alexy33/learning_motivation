@@ -197,6 +197,41 @@ ui_punishment_warning() {
   local punishment_type=$1
   local duration=$2
 
+  # Descriptions des pénalités améliorées
+  local punishment_description=""
+  case "$punishment_type" in
+    "network_restriction")
+      punishment_description="🌐 Restriction réseau complète"
+      ;;
+    "website_block")
+      punishment_description="🚫 Blocage sites distractifs"
+      ;;
+    "notification_spam")
+      punishment_description="📢 Notifications de rappel fréquentes"
+      ;;
+    "mouse_sensitivity")
+      punishment_description="🖱️ Sensibilité souris réduite"
+      ;;
+    "annoying_sound")
+      punishment_description="🔊 Son strident avec volume progressif"
+      ;;
+    "command_swap")
+      punishment_description="🔄 Commandes terminal inversées"
+      ;;
+    "screen_distortion")
+      punishment_description="📺 Distorsion/rotation d'écran"
+      ;;
+    "keyboard_delay")
+      punishment_description="⌨️ Délai de répétition clavier"
+      ;;
+    "fake_errors")
+      punishment_description="💥 Injection de fausses erreurs"
+      ;;
+    *)
+      punishment_description="💀 Pénalité système"
+      ;;
+  esac
+
   gum style \
     --border thick \
     --margin "1 2" \
@@ -204,10 +239,35 @@ ui_punishment_warning() {
     --border-foreground "#FF0000" \
     "💀 ÉCHEC DE MISSION DÉTECTÉ" \
     "" \
-    "🚨 Pénalité: $punishment_type" \
+    "🚨 Pénalité: $punishment_description" \
     "⏱️  Durée: $duration minutes" \
     "" \
-    "⚡ Application dans 5 secondes..."
+    "⚡ Application dans 5 secondes..." \
+    "" \
+    "🃏 Prochain joker rechargé demain"
+}
+
+# ============================================================================
+# Nouvelle fonction pour afficher les pénalités disponibles
+# ============================================================================
+
+show_punishment_info() {
+  ui_header "💀 Informations sur les Pénalités"
+
+  local min_duration max_duration
+  min_duration=$(config_get '.punishment_settings.min_duration')
+  max_duration=$(config_get '.punishment_settings.max_duration')
+
+  ui_box "⚠️ PÉNALITÉS EN CAS D'ÉCHEC" \
+    "En cas d'échec de mission, une pénalité aléatoire sera appliquée.|Durée: entre $min_duration et $max_duration minutes||Types de pénalités possibles:|🌐 Restriction du réseau complet|🚫 Blocage de sites distractifs|🖱️ Réduction sensibilité souris|🔊 Son strident avec volume progressif|🔄 Commandes terminal inversées (ls/sl, etc.)|📺 Distorsion/rotation d'écran|⌨️ Délai de répétition clavier|💥 Injection de fausses erreurs système|📢 Notifications de rappel fréquentes||Ces pénalités sont motivationnelles et temporaires.|Utilisez vos jokers pour les éviter !" \
+    "#FF6B6B"
+
+  echo
+  ui_info "🎯 Pénalités actuellement actives :"
+  punishment_list_active
+
+  echo
+  ui_wait
 }
 
 # ============================================================================
